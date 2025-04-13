@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from 'firebase/auth';
-import { auth, signInWithGoogle, signOut, isUserProfileComplete } from '../utils/firebase';
+import { auth, signInWithGoogle, signOut, isUserProfileComplete, getRedirectResult } from '../utils/firebase';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -40,53 +40,77 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setIsProfileComplete(isComplete);
       return isComplete;
     } catch (error) {
-      console.error('檢查用戶資料時出錯:', error);
+      console.error('檢查用戶資料時出錯', error);
       return false;
     }
   };
 
-  // 監控用戶身份狀態
+  // 處理重定向登入結果
   useEffect(() => {
-    setLoading(true);
-    
-    if (auth) {
-      const unsubscribe = auth.onAuthStateChanged(async (user) => {
-        setCurrentUser(user);
+    const handleRedirectResult = async () => {
+      try {
+        if (!auth) return;
+        
+        console.log('檢查重定向登入結果...');
+        const result = await getRedirectResult(auth);
+        
+        if (result && result.user) {
+          console.log('重定向登入成功', result.user);
+          setCurrentUser(result.user);
+          toast.success('登入成功！歡迎回來，' + (result.user.displayName || '同學'), {
+            duration: 3000,
+            icon: '👋',
+          });
+          
+          // 檢查用戶資料是否完整
+          const isComplete = await checkProfileComplete(result.user.uid);
+          
+          // 根據資料完整性導向不同頁面
+          if (isComplete) {
+            navigate('/mistakes');
+          } else {
+            navigate('/profile/setup');
+          }
+        }
+      } catch (error) {
+        console.error('處理重定向結果時出錯:', error);
+        toast.error('登入處理時出錯，請再試一次');
+      } finally {
         setLoading(false);
-      });
-      
-      // 在組件卸載時取消訂閱
-      return () => unsubscribe();
-    } else {
-      // 如果 auth 為 null，直接設置為未登入狀態
-      setCurrentUser(null);
+      }
+    };
+    
+    handleRedirectResult();
+  }, [navigate]);
+
+  // 監聽用戶狀態變化
+  useEffect(() => {
+    if (!auth) {
       setLoading(false);
-      return () => {};
+      return;
     }
+    
+    console.log('設置用戶狀態監聽器...');
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      console.log('用戶狀態變化', user ? user.email : '未登入');
+      setCurrentUser(user);
+      
+      if (user) {
+        await checkProfileComplete(user.uid);
+      }
+      
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const login = async (): Promise<void> => {
     try {
       setLoading(true);
-      const user = await signInWithGoogle();
-      setCurrentUser(user);
-      
-      if (user) {
-        toast.success('登入成功！歡迎回來，' + (user.displayName || '同學'), {
-          duration: 3000,
-          icon: '👋',
-        });
-        
-        // 檢查用戶資料是否完整
-        const isComplete = await checkProfileComplete(user.uid);
-        
-        // 根據資料完整性導向不同頁面
-        if (isComplete) {
-          navigate('/mistakes');
-        } else {
-          navigate('/profile/setup');
-        }
-      }
+      // signInWithGoogle 現在會進行重定向，不再返回用戶對象
+      await signInWithGoogle();
+      // 登入成功邏輯已在 handleRedirectResult 函數中處理
     } catch (error) {
       console.error('登入失敗:', error);
       if (error instanceof Error && error.message.includes('hd')) {
@@ -99,7 +123,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           duration: 3000,
         });
       }
-    } finally {
       setLoading(false);
     }
   };

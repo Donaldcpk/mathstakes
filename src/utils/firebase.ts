@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, User } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signOut as firebaseSignOut, onAuthStateChanged, User, signInWithRedirect, getRedirectResult as firebaseGetRedirectResult } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, deleteDoc, query, where, getDocs, addDoc, orderBy, limit, startAfter } from 'firebase/firestore';
 import { getAnalytics } from 'firebase/analytics';
 import toast from 'react-hot-toast';
@@ -22,6 +22,7 @@ const firebaseConfig = {
 // 初始化 Firebase
 let app;
 try {
+  console.log('嘗試初始化 Firebase', JSON.stringify(firebaseConfig, null, 2));
   app = initializeApp(firebaseConfig);
   console.log('Firebase 初始化成功');
 } catch (error) {
@@ -30,6 +31,7 @@ try {
   app = null;
 }
 
+// 初始化服務
 export const auth = app ? getAuth(app) : null;
 export const db = app ? getFirestore(app) : null;
 
@@ -71,13 +73,17 @@ export const signInWithGoogle = async (): Promise<User | null> => {
   }
 
   try {
-    const result = await signInWithPopup(auth, googleProvider);
-    console.log('登入成功', result.user);
-    toast.success('登入成功！');
-    return result.user;
+    console.log('開始 Google 登入流程...');
+    // 不使用彈出窗口，改用重定向方式登入，避免彈出窗口被阻擋
+    // const result = await signInWithPopup(auth, googleProvider);
+    
+    // 使用重定向方式登入
+    await signInWithRedirect(auth, googleProvider);
+    console.log('已重定向到 Google 登入頁面');
+    return null; // 重定向後會離開頁面，所以返回 null
   } catch (error) {
     console.error('Google 登入錯誤', error);
-    toast.error('登入失敗，請再試一次');
+    toast.error('登入失敗，請再試一次：' + (error instanceof Error ? error.message : '未知錯誤'));
     return null;
   }
 };
@@ -319,4 +325,19 @@ export const saveUserProfile = async (profile: UserProfile): Promise<boolean> =>
 export const isUserProfileComplete = async (userId: string): Promise<boolean> => {
   const profile = await getUserProfile(userId);
   return profile !== null && profile.isProfileComplete === true;
+};
+
+// 匯出 getRedirectResult 函數，用於處理重定向登入結果
+export const getRedirectResult = async (auth: any) => {
+  if (!auth) {
+    console.error('Firebase 認證服務未初始化');
+    return null;
+  }
+  
+  try {
+    return await firebaseGetRedirectResult(auth);
+  } catch (error) {
+    console.error('獲取重定向結果失敗:', error);
+    throw error;
+  }
 }; 
