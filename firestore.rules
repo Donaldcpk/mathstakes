@@ -1,0 +1,22 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 用戶只能訪問自己的錯題
+    match /users/{userId}/mistakes/{mistakeId} {
+      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // 用戶個人資料
+    match /users/{userId} {
+      allow read, update: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // 預設拒絕所有請求
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+} 
