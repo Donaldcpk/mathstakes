@@ -31,7 +31,7 @@ const getAllApiKeys = (): string[] => {
     import.meta.env.VITE_OPENROUTER_API_KEY_1,
     import.meta.env.VITE_OPENROUTER_API_KEY_2,
     import.meta.env.VITE_OPENROUTER_API_KEY_3
-  ].filter(key => key && key.length > 0); // 過濾掉未設置的密鑰
+  ].filter((key): key is string => typeof key === 'string' && key.length > 0); // 過濾掉未設置的密鑰
 };
 
 // 初始化或獲取 API 密鑰使用統計

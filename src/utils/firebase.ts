@@ -7,51 +7,69 @@ import { Mistake } from '../types';
 import { UserProfile } from '../types';
 
 // Firebase 配置
+// 注意：Firebase 設計為可在客戶端使用，這些配置實際上不是秘密
+// https://firebase.google.com/docs/projects/api-keys
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+  apiKey: "AIzaSyBvSo54fPYT11tDeVkdC4mTgP2HqsgMb28",
+  authDomain: "mathstakes-app.firebaseapp.com",
+  projectId: "mathstakes-app",
+  storageBucket: "mathstakes-app.firebasestorage.app",
+  messagingSenderId: "73353927746",
+  appId: "1:73353927746:web:44d2814fe3c0e81b2161db",
+  measurementId: "G-PFEBG1ZN30"
 };
 
 // 初始化 Firebase
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+let app;
+try {
+  app = initializeApp(firebaseConfig);
+  console.log('Firebase 初始化成功');
+} catch (error) {
+  console.error('Firebase 初始化失敗:', error);
+  // 添加錯誤處理，防止應用崩潰
+  app = null;
+}
+
+export const auth = app ? getAuth(app) : null;
+export const db = app ? getFirestore(app) : null;
 
 // 初始化 Analytics (只在瀏覽器環境中運行)
 let analytics = null;
-if (typeof window !== 'undefined') {
-  analytics = getAnalytics(app);
+if (typeof window !== 'undefined' && app) {
+  try {
+    analytics = getAnalytics(app);
+  } catch (error) {
+    console.error('Firebase Analytics 初始化失敗:', error);
+  }
 }
 export { analytics };
 
 // 提供者
 export const googleProvider = new GoogleAuthProvider();
 
-// 限制使用特定域名的帳號登入
-googleProvider.setCustomParameters({
-  hd: 'ngwahsec.edu.hk' // 學校域名
-});
-
 // 當前登入的用戶
 let currentUser: User | null = null;
 
 // 監聽用戶狀態變化
-onAuthStateChanged(auth, (user) => {
-  currentUser = user;
-});
+if (auth) {
+  onAuthStateChanged(auth, (user) => {
+    currentUser = user;
+  });
+}
 
 // 獲取當前用戶
 export const getCurrentUser = (): User | null => {
-  return currentUser || auth.currentUser;
+  return currentUser || (auth ? auth.currentUser : null);
 };
 
 // 使用 Google 登入
 export const signInWithGoogle = async (): Promise<User | null> => {
+  if (!auth || !googleProvider) {
+    console.error('Firebase 認證服務未初始化');
+    toast.error('登入服務未初始化，請重新載入頁面');
+    return null;
+  }
+
   try {
     const result = await signInWithPopup(auth, googleProvider);
     console.log('登入成功', result.user);
@@ -66,6 +84,12 @@ export const signInWithGoogle = async (): Promise<User | null> => {
 
 // 登出
 export const signOut = async (): Promise<void> => {
+  if (!auth) {
+    console.error('Firebase 認證服務未初始化');
+    toast.error('登出服務未初始化');
+    return;
+  }
+
   try {
     await firebaseSignOut(auth);
     toast.success('成功登出');
@@ -77,6 +101,12 @@ export const signOut = async (): Promise<void> => {
 
 // 獲取用戶錯題
 export const getUserMistakes = async (userId: string): Promise<Mistake[]> => {
+  if (!db) {
+    console.error('Firebase 數據庫服務未初始化');
+    toast.error('數據服務未初始化，請重新載入頁面');
+    return [];
+  }
+
   try {
     console.time('firebase-fetch-mistakes');
     
@@ -147,6 +177,12 @@ export const getUserMistakes = async (userId: string): Promise<Mistake[]> => {
 
 // 保存用戶錯題
 export const saveUserMistake = async (userId: string, mistake: Omit<Mistake, 'id' | 'userId'>): Promise<Mistake | null> => {
+  if (!db) {
+    console.error('Firebase 數據庫服務未初始化');
+    toast.error('無法保存錯題，服務未初始化');
+    return null;
+  }
+
   try {
     console.time('firebase-save-mistake');
     
@@ -177,6 +213,12 @@ export const saveUserMistake = async (userId: string, mistake: Omit<Mistake, 'id
 
 // 更新用戶錯題
 export const updateUserMistake = async (mistakeId: string, updateData: Partial<Omit<Mistake, 'id' | 'userId'>>): Promise<boolean> => {
+  if (!db) {
+    console.error('Firebase 數據庫服務未初始化');
+    toast.error('無法更新錯題，服務未初始化');
+    return false;
+  }
+
   try {
     console.time('firebase-update-mistake');
     
@@ -200,6 +242,12 @@ export const updateUserMistake = async (mistakeId: string, updateData: Partial<O
 
 // 刪除用戶錯題
 export const deleteUserMistake = async (mistakeId: string): Promise<boolean> => {
+  if (!db) {
+    console.error('Firebase 數據庫服務未初始化');
+    toast.error('無法刪除錯題，服務未初始化');
+    return false;
+  }
+
   try {
     console.time('firebase-delete-mistake');
     
@@ -220,6 +268,12 @@ export const deleteUserMistake = async (mistakeId: string): Promise<boolean> => 
 
 // 獲取用戶資料
 export const getUserProfile = async (userId: string): Promise<UserProfile | null> => {
+  if (!db) {
+    console.error('Firebase 數據庫服務未初始化');
+    toast.error('無法獲取用戶資料，服務未初始化');
+    return null;
+  }
+
   try {
     const userRef = doc(db, 'users', userId);
     const userSnap = await getDoc(userRef);
@@ -239,6 +293,12 @@ export const getUserProfile = async (userId: string): Promise<UserProfile | null
 
 // 保存用戶資料
 export const saveUserProfile = async (profile: UserProfile): Promise<boolean> => {
+  if (!db) {
+    console.error('Firebase 數據庫服務未初始化');
+    toast.error('無法保存用戶資料，服務未初始化');
+    return false;
+  }
+
   try {
     const userRef = doc(db, 'users', profile.uid);
     await setDoc(userRef, {

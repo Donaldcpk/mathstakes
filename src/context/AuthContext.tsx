@@ -45,21 +45,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  // 監控用戶身份狀態
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      setCurrentUser(user);
+    setLoading(true);
+    
+    if (auth) {
+      const unsubscribe = auth.onAuthStateChanged(async (user) => {
+        setCurrentUser(user);
+        setLoading(false);
+      });
       
-      if (user) {
-        // 用戶已登入，檢查資料是否完整
-        await checkProfileComplete(user.uid);
-      } else {
-        setIsProfileComplete(false);
-      }
-      
+      // 在組件卸載時取消訂閱
+      return () => unsubscribe();
+    } else {
+      // 如果 auth 為 null，直接設置為未登入狀態
+      setCurrentUser(null);
       setLoading(false);
-    });
-
-    return unsubscribe;
+      return () => {};
+    }
   }, []);
 
   const login = async (): Promise<void> => {

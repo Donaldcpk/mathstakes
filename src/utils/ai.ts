@@ -16,35 +16,16 @@ const AI_CONFIG = {
   }
 };
 
-// 檢查URL是否有效
+// 檢查圖片 URL 是否有效
 const isValidImageUrl = async (url: string): Promise<boolean> => {
   try {
     const response = await fetch(url, { method: 'HEAD' });
-    return response.ok;
+    const contentType = response.headers.get('content-type') || '';
+    return response.ok && contentType.startsWith('image/');
   } catch (error) {
-    console.error('檢查圖片URL時出錯:', error);
+    console.error('檢查圖片URL有效性出錯:', error);
     return false;
   }
-};
-
-// 獲取可用的API密鑰
-const getOpenRouterApiKey = (): string | null => {
-  // 嘗試獲取所有可能的API密鑰
-  const apiKeys = [
-    import.meta.env.VITE_OPENROUTER_API_KEY_1,
-    import.meta.env.VITE_OPENROUTER_API_KEY_2,
-    import.meta.env.VITE_OPENROUTER_API_KEY_3
-  ].filter(Boolean); // 過濾掉空值
-  
-  // 如果沒有有效的API密鑰，返回null
-  if (apiKeys.length === 0) {
-    console.error('找不到有效的OpenRouter API密鑰');
-    return null;
-  }
-  
-  // 隨機選擇一個API密鑰
-  const randomIndex = Math.floor(Math.random() * apiKeys.length);
-  return apiKeys[randomIndex];
 };
 
 // 處理API請求錯誤
@@ -105,6 +86,31 @@ const mapTopicCategory = (category?: string): TopicCategory | undefined => {
   return TopicCategory.NUMBER_ALGEBRA;
 };
 
+// 獲取 API 密鑰 - 優先使用代理，如果設置了前端密鑰也可以直接使用
+const getApiConfig = () => {
+  // 檢查是否有前端密鑰（不安全但兼容）
+  const frontendKeys = [
+    import.meta.env.VITE_OPENROUTER_API_KEY_1,
+    import.meta.env.VITE_OPENROUTER_API_KEY_2,
+    import.meta.env.VITE_OPENROUTER_API_KEY_3
+  ].filter(Boolean) as string[];
+  
+  // 如果有前端密鑰，返回直接調用模式
+  if (frontendKeys.length > 0) {
+    const randomIndex = Math.floor(Math.random() * frontendKeys.length);
+    return {
+      useProxy: false,
+      apiKey: frontendKeys[randomIndex]
+    };
+  }
+  
+  // 否則返回代理模式
+  return {
+    useProxy: true,
+    apiKey: null
+  };
+};
+
 // 使用 OpenRouter API 從圖片生成題目資訊
 export const generateMistakeInfoFromImage = async (
   imageUrl: string
@@ -117,16 +123,13 @@ export const generateMistakeInfoFromImage = async (
   createdAt: string;
 }> => {
   try {
-    // 檢查API密鑰是否設置
-    const apiKey = getOpenRouterApiKey();
-    if (!apiKey) {
-      throw handleApiError(new Error('API Key 未設置，請在 .env 文件中設置 VITE_OPENROUTER_API_KEY'));
-    }
-    
     // 驗證圖片URL是否有效
     if (!imageUrl || !(await isValidImageUrl(imageUrl))) {
       throw handleApiError(new Error('圖片格式無效或URL無法訪問'));
     }
+    
+    // 獲取 API 配置
+    const apiConfig = getApiConfig();
     
     // 構建系統提示詞
     const systemPrompt = `
@@ -166,7 +169,7 @@ export const generateMistakeInfoFromImage = async (
         ]}
       ],
       temperature: AI_CONFIG.temperature,
-      max_tokens: AI_CONFIG.maxTokens
+      maxTokens: AI_CONFIG.maxTokens
     };
     
     // 設置超時
@@ -174,17 +177,34 @@ export const generateMistakeInfoFromImage = async (
       setTimeout(() => reject(handleApiError(new Error('API 請求超時'))), AI_CONFIG.responseTimeout);
     });
     
-    // 發送請求
-    const responsePromise = fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': window.location.origin,
-        'X-Title': 'Mathstakes'
-      },
-      body: JSON.stringify(requestBody)
-    });
+    let responsePromise;
+    
+    // 根據配置使用不同的調用方式
+    if (apiConfig.useProxy) {
+      // 使用代理 API
+      responsePromise = fetch('/api/openrouter-proxy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+    } else {
+      // 直接調用 API（不安全，僅作為備用）
+      responsePromise = fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiConfig.apiKey}`,
+          'HTTP-Referer': window.location.origin,
+          'X-Title': 'Mathstakes'
+        },
+        body: JSON.stringify({
+          ...requestBody,
+          max_tokens: requestBody.maxTokens // 修正字段名
+        })
+      });
+    }
     
     // 等待請求完成或超時
     const response = await Promise.race([responsePromise, timeoutPromise]);
@@ -245,11 +265,8 @@ export const generateMistakeInfoFromImage = async (
 // 根據錯題生成AI解釋
 export const generateAIExplanation = async (mistake: Mistake): Promise<string> => {
   try {
-    // 檢查API密鑰是否設置
-    const apiKey = getOpenRouterApiKey();
-    if (!apiKey) {
-      throw handleApiError(new Error('API Key 未設置，請在 .env 文件中設置 VITE_OPENROUTER_API_KEY'));
-    }
+    // 獲取 API 配置
+    const apiConfig = getApiConfig();
     
     // 構建系統提示詞
     const systemPrompt = AI_CONFIG.textGeneration.systemPrompt;
@@ -287,7 +304,7 @@ export const generateAIExplanation = async (mistake: Mistake): Promise<string> =
         { role: 'user', content: userPrompt }
       ],
       temperature: AI_CONFIG.temperature,
-      max_tokens: AI_CONFIG.maxTokens
+      maxTokens: AI_CONFIG.maxTokens
     };
     
     // 設置超時
@@ -295,17 +312,34 @@ export const generateAIExplanation = async (mistake: Mistake): Promise<string> =
       setTimeout(() => reject(handleApiError(new Error('API 請求超時'))), AI_CONFIG.responseTimeout * 1.5); // 解釋生成允許更長時間
     });
     
-    // 發送請求
-    const responsePromise = fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': window.location.origin,
-        'X-Title': 'Mathstakes'
-      },
-      body: JSON.stringify(requestBody)
-    });
+    let responsePromise;
+    
+    // 根據配置使用不同的調用方式
+    if (apiConfig.useProxy) {
+      // 使用代理 API
+      responsePromise = fetch('/api/openrouter-proxy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+    } else {
+      // 直接調用 API（不安全，僅作為備用）
+      responsePromise = fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiConfig.apiKey}`,
+          'HTTP-Referer': window.location.origin,
+          'X-Title': 'Mathstakes'
+        },
+        body: JSON.stringify({
+          ...requestBody,
+          max_tokens: requestBody.maxTokens // 修正字段名
+        })
+      });
+    }
     
     // 等待請求完成或超時
     const response = await Promise.race([responsePromise, timeoutPromise]);
@@ -324,7 +358,7 @@ export const generateAIExplanation = async (mistake: Mistake): Promise<string> =
     
     return content;
   } catch (error) {
-    console.error('生成 AI 解釋時出錯:', error);
+    console.error('生成解釋出錯:', error);
     throw error;
   }
 }; 

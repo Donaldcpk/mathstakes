@@ -30,8 +30,8 @@ const MISTAKES_KEY = 'mistakes';
 const SAMPLE_DATA_KEY = 'sample_data_initialized';
 
 // 檢查用戶是否已登入
-export const isLoggedIn = (): boolean => {
-  return auth.currentUser !== null;
+export const isUserLoggedIn = (): boolean => {
+  return auth?.currentUser !== null;
 };
 
 // 獲取用戶ID
@@ -60,7 +60,7 @@ export const getMistakes = async (): Promise<Mistake[]> => {
       lastCacheTime = now;
       
       // 在背景更新雲端數據（不阻塞UI）
-      if (isLoggedIn()) {
+      if (isUserLoggedIn()) {
         const userId = getUserId();
         if (userId) {
           isSyncingInBackground = true;
@@ -94,7 +94,7 @@ export const getMistakes = async (): Promise<Mistake[]> => {
     // 主要資料獲取邏輯
     const dataPromise = async (): Promise<Mistake[]> => {
       // 如果用戶已登入，從Firebase獲取資料
-      if (isLoggedIn()) {
+      if (isUserLoggedIn()) {
         const userId = getUserId();
         if (userId) {
           const cloudMistakes = await getUserMistakes(userId);
@@ -204,7 +204,7 @@ export const saveMistake = async (
         };
         
         // 如果用戶已登入，保存到Firebase
-        if (isLoggedIn()) {
+        if (isUserLoggedIn()) {
           const userId = getUserId();
           if (userId) {
             const savedMistake = await saveUserMistake(userId, {
@@ -265,7 +265,7 @@ export const saveMistake = async (
 export const updateMistake = async (id: string, updates: Partial<Mistake>): Promise<Mistake | null> => {
   try {
     // 如果用戶已登入，更新Firebase
-    if (isLoggedIn()) {
+    if (isUserLoggedIn()) {
       const success = await updateUserMistake(id, updates);
       if (success) {
         // 更新緩存
@@ -322,7 +322,7 @@ export const updateMistake = async (id: string, updates: Partial<Mistake>): Prom
 export const deleteMistake = async (id: string): Promise<boolean> => {
   try {
     // 如果用戶已登入，從Firebase刪除
-    if (isLoggedIn()) {
+    if (isUserLoggedIn()) {
       const success = await deleteUserMistake(id);
       if (success) {
         // 更新緩存

@@ -1,13 +1,12 @@
-import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom'
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuth, AuthProvider } from './context/AuthContext';
-
-// 頁面組件
-import HomePage from './pages/HomePage'
-import MistakeForm from './pages/MistakeForm'
-import MistakeDetail from './pages/MistakeDetail'
-import MistakeList from './pages/MistakeList'
-import LoginButton from './components/LoginButton';
+import { ErrorBoundary } from 'react-error-boundary';
+import HomePage from './pages/HomePage';
+import MistakeList from './pages/MistakeList';
+import MistakeDetail from './pages/MistakeDetail';
+import MistakeForm from './pages/MistakeForm';
 import ProfileSetup from './pages/ProfileSetup';
 
 // 需要登入才能訪問的路由保護組件
@@ -33,91 +32,72 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-// 應用程序根組件，包裝 AuthProvider
-const AppWithAuth: React.FC = () => {
+// 錯誤處理元件
+function ErrorFallback({ error }: { error: any }) {
   return (
-    <Router>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </Router>
-  );
-};
-
-// 主應用組件
-function App() {
-  const { currentUser } = useAuth();
-
-  return (
-    <div className="min-h-screen bg-gray-100">
-      <Toaster position="top-right" />
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Mathstakes</h1>
-              <p className="text-gray-600">數學錯題學習平台</p>
-            </div>
-            <div className="flex items-center">
-              <nav className="flex space-x-4 mr-4">
-                <Link to="/" className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">
-                  首頁
-                </Link>
-                {currentUser && (
-                  <>
-                    <Link to="/mistakes" className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">
-                      錯題本
-                    </Link>
-                    <Link to="/mistakes/new" className="px-3 py-2 rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
-                      新增錯題
-                    </Link>
-                  </>
-                )}
-              </nav>
-              <LoginButton />
-            </div>
-          </div>
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="max-w-lg p-8 bg-white rounded-lg shadow-lg">
+        <h2 className="text-2xl font-bold text-red-600 mb-4">應用發生錯誤</h2>
+        <p className="text-gray-700 mb-4">非常抱歉，應用遇到了問題。請嘗試刷新頁面。</p>
+        <div className="bg-gray-100 p-4 rounded overflow-auto">
+          <code className="text-sm text-red-500">{error.message}</code>
         </div>
-      </header>
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route 
-              path="/mistakes" 
-              element={
-                <PrivateRoute>
-                  <MistakeList />
-                </PrivateRoute>
-              } 
-            />
-            <Route 
-              path="/mistakes/new" 
-              element={
-                <PrivateRoute>
-                  <MistakeForm />
-                </PrivateRoute>
-              } 
-            />
-            <Route 
-              path="/mistakes/:id" 
-              element={
-                <PrivateRoute>
-                  <MistakeDetail />
-                </PrivateRoute>
-              } 
-            />
-            <Route path="/profile/setup" element={
-              <PrivateRoute>
-                <ProfileSetup />
-              </PrivateRoute>
-            } />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </div>
-      </main>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="mt-6 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition"
+        >
+          刷新頁面
+        </button>
+      </div>
     </div>
   );
 }
+
+// 應用程序根組件，包裝 AuthProvider
+const AppWithAuth: React.FC = () => {
+  const [isLoading, setIsLoading] = useState(true);
+
+  // 測試 API 連接
+  useEffect(() => {
+    fetch('/api')
+      .then(res => res.json())
+      .then(data => {
+        console.log('API 健康檢查:', data);
+        setIsLoading(false);
+      })
+      .catch(err => {
+        console.error('API 檢查失敗:', err);
+        // API 失敗但不阻止應用啟動
+        setTimeout(() => setIsLoading(false), 1000); // 確保即使 API 無法訪問也會繼續
+      });
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <div className="ml-4 text-lg text-gray-700">載入中...</div>
+      </div>
+    );
+  }
+
+  return (
+    <ErrorBoundary FallbackComponent={ErrorFallback}>
+      <AuthProvider>
+        <Router>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/mistakes" element={<PrivateRoute><MistakeList /></PrivateRoute>} />
+            <Route path="/mistakes/:id" element={<PrivateRoute><MistakeDetail /></PrivateRoute>} />
+            <Route path="/mistakes/new" element={<PrivateRoute><MistakeForm /></PrivateRoute>} />
+            <Route path="/profile/setup" element={<PrivateRoute><ProfileSetup /></PrivateRoute>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+          <Toaster position="top-right" />
+        </Router>
+      </AuthProvider>
+    </ErrorBoundary>
+  );
+};
 
 export default AppWithAuth; 
