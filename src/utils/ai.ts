@@ -1,4 +1,6 @@
 import { Mistake, EducationLevel, TopicCategory, ErrorType } from '../types';
+import { withRetry, waitForNetwork, isOnline } from './networkRetry';
+import { toast } from 'react-hot-toast';
 
 // AI 配置
 const AI_CONFIG = {
@@ -112,17 +114,17 @@ const getApiConfig = () => {
 };
 
 // 使用 OpenRouter API 從圖片生成題目資訊
-export const generateMistakeInfoFromImage = async (
-  imageUrl: string
-): Promise<{
-  title: string;
-  content: string;
-  subject: string;
-  educationLevel: EducationLevel;
-  topicCategory?: TopicCategory;
-  createdAt: string;
-}> => {
+export async function generateMistakeInfoFromImage(imageUrl: string): Promise<MistakeInfoResponse | null> {
   try {
+    console.log('開始處理圖片識別請求', new Date().toISOString());
+    
+    // 檢查網絡連接
+    if (!isOnline()) {
+      toast.error('您目前處於離線狀態，無法進行圖片識別');
+      console.error('處於離線狀態，無法進行圖片識別');
+      return null;
+    }
+
     // 驗證圖片URL是否有效
     if (!imageUrl || !(await isValidImageUrl(imageUrl))) {
       throw handleApiError(new Error('圖片格式無效或URL無法訪問'));
@@ -172,50 +174,41 @@ export const generateMistakeInfoFromImage = async (
       maxTokens: AI_CONFIG.maxTokens
     };
     
-    // 設置超時
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(handleApiError(new Error('API 請求超時'))), AI_CONFIG.responseTimeout);
-    });
-    
-    let responsePromise;
-    
-    // 根據配置使用不同的調用方式
-    if (apiConfig.useProxy) {
-      // 使用代理 API
-      responsePromise = fetch('/api/openrouter-proxy', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
-    } else {
-      // 直接調用 API（不安全，僅作為備用）
-      responsePromise = fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiConfig.apiKey}`,
-          'HTTP-Referer': window.location.origin,
-          'X-Title': 'Mathstakes'
-        },
-        body: JSON.stringify({
-          ...requestBody,
-          max_tokens: requestBody.maxTokens // 修正字段名
-        })
-      });
-    }
-    
-    // 等待請求完成或超時
-    const response = await Promise.race([responsePromise, timeoutPromise]);
-    const data = await response.json();
-    
-    if (!response.ok) {
-      const errorMsg = data.error?.message || `API 錯誤：HTTP ${response.status}`;
-      throw handleApiError(new Error(errorMsg));
-    }
+    // 使用重試機制包裝 API 請求
+    const response = await withRetry(
+      async () => {
+        // 原始 API 請求代碼
+        const response = await fetch(`${API_BASE_URL}/v1/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiConfig.apiKey}`,
+            'HTTP-Referer': window.location.origin,
+            'X-Title': 'Mathstakes'
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(`API請求失敗: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
+        }
+
+        return response;
+      },
+      {
+        maxRetries: 2,
+        initialDelay: 2000,
+        showToast: true,
+        timeout: 30000,
+        onRetry: (attempt, error) => {
+          console.log(`圖片識別請求重試 (${attempt})，錯誤:`, error);
+        }
+      }
+    );
     
     // 處理響應
+    const data = await response.json();
     const content = data.choices[0]?.message?.content;
     if (!content) {
       throw handleApiError(new Error('API 返回內容為空'));
@@ -260,7 +253,7 @@ export const generateMistakeInfoFromImage = async (
     console.error('生成題目信息出錯:', error);
     throw error;
   }
-};
+}
 
 // 根據錯題生成AI解釋
 export const generateAIExplanation = async (mistake: Mistake): Promise<string> => {

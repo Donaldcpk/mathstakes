@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signOut as firebaseSignOut, onAuthStateChanged, User, signInWithRedirect, getRedirectResult as firebaseGetRedirectResult } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signOut as firebaseSignOut, onAuthStateChanged, User, signInWithRedirect, getRedirectResult as firebaseGetRedirectResult, signInWithPopup } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, deleteDoc, query, where, getDocs, addDoc, orderBy, limit, startAfter } from 'firebase/firestore';
 import { getAnalytics } from 'firebase/analytics';
 import toast from 'react-hot-toast';
@@ -48,6 +48,16 @@ export { analytics };
 
 // 提供者
 export const googleProvider = new GoogleAuthProvider();
+// 添加自定義參數，確保登入流程順暢
+googleProvider.setCustomParameters({
+  prompt: 'select_account',
+  // 允許任何域名 - 用於測試環境
+  hd: '*',
+  // 要求同意基本資料
+  access_type: 'offline',
+  // 強制獲取更新後的令牌
+  include_granted_scopes: 'true'
+});
 
 // 當前登入的用戶
 let currentUser: User | null = null;
@@ -74,13 +84,22 @@ export const signInWithGoogle = async (): Promise<User | null> => {
 
   try {
     console.log('開始 Google 登入流程...');
-    // 不使用彈出窗口，改用重定向方式登入，避免彈出窗口被阻擋
-    // const result = await signInWithPopup(auth, googleProvider);
     
-    // 使用重定向方式登入
-    await signInWithRedirect(auth, googleProvider);
-    console.log('已重定向到 Google 登入頁面');
-    return null; // 重定向後會離開頁面，所以返回 null
+    // 嘗試使用彈出窗口方式登入
+    try {
+      console.log('嘗試使用彈出窗口登入');
+      const result = await signInWithPopup(auth, googleProvider);
+      console.log('彈出窗口登入成功', result.user.email);
+      toast.success('登入成功！');
+      return result.user;
+    } catch (popupError) {
+      console.error('彈出窗口登入失敗，嘗試重定向方式', popupError);
+      
+      // 如果彈出窗口失敗，使用重定向方式
+      await signInWithRedirect(auth, googleProvider);
+      console.log('已重定向到 Google 登入頁面');
+      return null; // 重定向後會離開頁面，所以返回 null
+    }
   } catch (error) {
     console.error('Google 登入錯誤', error);
     toast.error('登入失敗，請再試一次：' + (error instanceof Error ? error.message : '未知錯誤'));

@@ -13,6 +13,18 @@
       "headers": [
         { "key": "Cache-Control", "value": "s-maxage=0" }
       ]
+    },
+    {
+      "source": "/(.+\\.(ico|png|jpg|jpeg|svg|webp))",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/(workbox|sw)\\.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
     }
   ]
 } 

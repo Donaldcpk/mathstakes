@@ -51,35 +51,55 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       try {
         if (!auth) return;
         
-        console.log('檢查重定向登入結果...');
+        console.log('檢查重定向登入結果...', new Date().toISOString());
         const result = await getRedirectResult(auth);
         
+        console.log('重定向結果:', result ? '有結果' : '沒有結果', new Date().toISOString());
+        
         if (result && result.user) {
-          console.log('重定向登入成功', result.user);
+          console.log('重定向登入成功', result.user.email, new Date().toISOString());
+          
+          // 保存用戶到狀態
           setCurrentUser(result.user);
+          
+          // 顯示成功消息
           toast.success('登入成功！歡迎回來，' + (result.user.displayName || '同學'), {
-            duration: 3000,
+            duration: 5000,
             icon: '👋',
           });
           
           // 檢查用戶資料是否完整
           const isComplete = await checkProfileComplete(result.user.uid);
+          console.log('用戶資料是否完整:', isComplete, new Date().toISOString());
           
           // 根據資料完整性導向不同頁面
           if (isComplete) {
-            navigate('/mistakes');
+            console.log('導航至錯題列表頁', new Date().toISOString());
+            
+            // 使用強制頁面刷新處理第三方Cookie或導航問題
+            setTimeout(() => {
+              window.location.href = '/mistakes';
+            }, 500);
           } else {
-            navigate('/profile/setup');
+            console.log('導航至資料設置頁', new Date().toISOString());
+            
+            // 使用強制頁面刷新處理第三方Cookie或導航問題
+            setTimeout(() => {
+              window.location.href = '/profile/setup';
+            }, 500);
           }
+        } else {
+          console.log('沒有重定向結果或用戶信息為空', new Date().toISOString());
         }
       } catch (error) {
-        console.error('處理重定向結果時出錯:', error);
-        toast.error('登入處理時出錯，請再試一次');
+        console.error('處理重定向結果時出錯:', error, new Date().toISOString());
+        toast.error('登入處理時出錯: ' + (error instanceof Error ? error.message : '未知錯誤'));
       } finally {
         setLoading(false);
       }
     };
     
+    console.log('執行重定向處理邏輯', new Date().toISOString());
     handleRedirectResult();
   }, [navigate]);
 
@@ -108,19 +128,59 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (): Promise<void> => {
     try {
       setLoading(true);
-      // signInWithGoogle 現在會進行重定向，不再返回用戶對象
-      await signInWithGoogle();
-      // 登入成功邏輯已在 handleRedirectResult 函數中處理
+      console.log('登入函數開始執行', new Date().toISOString());
+      
+      // 嘗試使用 signInWithGoogle 進行登入
+      const user = await signInWithGoogle();
+      
+      // 如果直接獲取到用戶信息（彈出窗口方式成功）
+      if (user) {
+        console.log('直接登入成功', user.email, new Date().toISOString());
+        setCurrentUser(user);
+        
+        toast.success('登入成功！歡迎回來，' + (user.displayName || '同學'), {
+          duration: 3000,
+          icon: '👋',
+        });
+        
+        // 檢查用戶資料是否完整
+        const isComplete = await checkProfileComplete(user.uid);
+        console.log('資料完整性檢查結果:', isComplete, new Date().toISOString());
+        
+        // 根據資料完整性導向不同頁面
+        if (isComplete) {
+          console.log('導航至錯題列表頁', new Date().toISOString());
+          
+          // 使用強制頁面刷新處理第三方Cookie或導航問題
+          setTimeout(() => {
+            window.location.href = '/mistakes';
+          }, 500);
+        } else {
+          console.log('導航至設置頁', new Date().toISOString());
+          
+          // 使用強制頁面刷新處理第三方Cookie或導航問題
+          setTimeout(() => {
+            window.location.href = '/profile/setup';
+          }, 500);
+        }
+      } else {
+        console.log('彈出窗口登入未返回用戶資料，可能使用了重定向', new Date().toISOString());
+        // 重定向方式會在 handleRedirectResult 中處理
+      }
     } catch (error) {
-      console.error('登入失敗:', error);
+      console.error('登入失敗:', error, new Date().toISOString());
       if (error instanceof Error && error.message.includes('hd')) {
         toast.error('請使用學校的Google帳號登入', {
           duration: 4000,
           icon: '🏫',
         });
+      } else if (error instanceof Error && error.message.includes('cookie')) {
+        toast.error('瀏覽器可能阻止了第三方Cookie。請確保允許Cookie或嘗試其他瀏覽器', {
+          duration: 6000,
+        });
       } else {
-        toast.error('登入失敗，請稍後再試', {
-          duration: 3000,
+        toast.error('登入失敗，請稍後再試: ' + (error instanceof Error ? error.message : '未知錯誤'), {
+          duration: 5000,
         });
       }
       setLoading(false);

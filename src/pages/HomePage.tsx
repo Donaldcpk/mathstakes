@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import LoginButton from '../components/LoginButton';
 
 const HomePage: React.FC = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, loading } = useAuth();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-white">
@@ -18,8 +18,13 @@ const HomePage: React.FC = () => {
           </p>
         </div>
 
-        <div className="mt-10">
-          <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-600"></div>
+            <p className="mt-4 text-lg text-gray-600">正在處理登入，請稍候...</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl shadow-xl overflow-hidden max-w-4xl mx-auto">
             <div className="md:flex">
               <div className="md:w-1/2 p-8 md:p-12 flex flex-col justify-center">
                 {currentUser ? (
@@ -100,7 +105,7 @@ const HomePage: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

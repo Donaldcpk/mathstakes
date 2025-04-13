@@ -8,28 +8,36 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      includeAssets: ['favicon.ico', 'robots.txt'],
       manifest: {
-        name: 'Mathstakes - 數學學習助手',
-        short_name: 'Mathstakes',
-        description: '幫助中學生從錯誤中學習數學的應用程式',
-        theme_color: '#ffffff',
+        name: "Mathstakes - 數學學習助手",
+        short_name: "Mathstakes",
+        description: "幫助中學生從錯誤中學習數學的應用程式",
+        theme_color: "#4f46e5",
+        background_color: "#f8fafc",
+        display: "standalone",
         icons: [
           {
-            src: 'pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png'
+            src: "pwa-64x64.png",
+            sizes: "64x64",
+            type: "image/png"
           },
           {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png'
+            src: "pwa-192x192.png",
+            sizes: "192x192",
+            type: "image/png"
           },
           {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any maskable'
+            src: "pwa-512x512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any"
+          },
+          {
+            src: "maskable-icon.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable"
           }
         ]
       },
@@ -64,4 +72,7 @@ export default defineConfig({
       }
     })
   ],
+  server: {
+    port: 3000,
+  }
 }) 

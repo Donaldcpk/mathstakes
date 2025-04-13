@@ -8,6 +8,7 @@ import MistakeList from './pages/MistakeList';
 import MistakeDetail from './pages/MistakeDetail';
 import MistakeForm from './pages/MistakeForm';
 import ProfileSetup from './pages/ProfileSetup';
+import OfflineIndicator from './components/OfflineIndicator';
 
 // 全局錯誤處理組件
 interface ErrorFallbackProps {
@@ -66,6 +67,7 @@ function App() {
       <ErrorBoundary FallbackComponent={ErrorFallback}>
         <AuthProvider>
           <Toaster position="top-center" />
+          <OfflineIndicator />
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/profile/setup" element={<PrivateRoute><ProfileSetup /></PrivateRoute>} />

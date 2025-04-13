@@ -5,10 +5,18 @@ const LoginButton: React.FC = () => {
   const { currentUser, login, logout, loading } = useAuth();
 
   const handleAuth = async () => {
-    if (currentUser) {
-      await logout();
-    } else {
-      await login();
+    console.log('登入按鈕被點擊', new Date().toISOString());
+    try {
+      if (currentUser) {
+        console.log('嘗試登出');
+        await logout();
+      } else {
+        console.log('嘗試登入');
+        await login();
+        console.log('登入函數執行完畢');
+      }
+    } catch (error) {
+      console.error('按鈕處理錯誤:', error);
     }
   };
 

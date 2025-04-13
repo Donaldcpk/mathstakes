@@ -2,6 +2,10 @@ import localforage from 'localforage';
 import { v4 as uuidv4 } from 'uuid';
 import { Mistake, ErrorType, EducationLevel, TopicCategory } from '../types';
 import { auth, getCurrentUser, saveUserMistake, getUserMistakes, updateUserMistake, deleteUserMistake } from './firebase';
+import { isOnline, waitForNetwork } from './networkRetry';
+import { toast } from 'react-hot-toast';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from './firebase';
 
 // 初始化 localforage
 localforage.config({
@@ -438,4 +442,136 @@ export const initializeSampleData = async (): Promise<void> => {
   } finally {
     isInitializing = false;
   }
-}; 
+};
+
+/**
+ * 添加離線同步標記
+ * @param key 同步對象的鍵
+ */
+export async function markForSync(key: string): Promise<void> {
+  const syncQueue = await localforage.getItem<string[]>('sync_queue') || [];
+  if (!syncQueue.includes(key)) {
+    syncQueue.push(key);
+    await localforage.setItem('sync_queue', syncQueue);
+    console.log(`已將項目標記為待同步: ${key}`);
+  }
+}
+
+/**
+ * 同步離線變更到雲端
+ * 在恢復網絡連接後調用
+ */
+export async function syncOfflineChanges(): Promise<void> {
+  if (!isOnline()) {
+    console.log('離線狀態，無法同步');
+    return;
+  }
+
+  const syncQueue = await localforage.getItem<string[]>('sync_queue') || [];
+  if (syncQueue.length === 0) {
+    console.log('沒有待同步的項目');
+    return;
+  }
+
+  const user = getCurrentUser();
+  if (!user) {
+    console.log('用戶未登入，無法同步到雲端');
+    return;
+  }
+
+  console.log(`開始同步 ${syncQueue.length} 個離線變更`);
+  toast.loading(`正在同步資料...`, { id: 'sync-toast' });
+
+  const failedItems: string[] = [];
+  
+  for (const key of syncQueue) {
+    try {
+      // 處理不同類型的同步
+      if (key.startsWith('mistake_')) {
+        const mistakeId = key.replace('mistake_', '');
+        const mistake = await getMistake(mistakeId);
+        
+        if (mistake) {
+          await saveMistakeToCloud(mistake);
+          console.log(`成功同步錯題: ${mistakeId}`);
+        }
+      }
+      // 可以添加其他類型的同步處理
+      
+    } catch (error) {
+      console.error(`同步項目失敗: ${key}`, error);
+      failedItems.push(key);
+    }
+  }
+
+  // 更新同步隊列，只保留失敗的項目
+  if (failedItems.length > 0) {
+    await localforage.setItem('sync_queue', failedItems);
+    toast.error(`同步完成，但有 ${failedItems.length} 個項目失敗`, { id: 'sync-toast' });
+  } else {
+    await localforage.setItem('sync_queue', []);
+    toast.success('所有資料同步完成', { id: 'sync-toast' });
+  }
+}
+
+/**
+ * 保存錯題到本地儲存
+ * 如果離線，標記為需要同步
+ */
+export async function saveMistake(mistake: Mistake, createdAt?: string): Promise<string> {
+  try {
+    // ... existing code ...
+
+    // 添加到本地儲存
+    let mistakes = await localforage.getItem<Record<string, Mistake>>('mistakes') || {};
+    mistakes[mistakeId] = mistake;
+    await localforage.setItem('mistakes', mistakes);
+
+    // 如果在線並且用戶已登入，嘗試保存到雲端
+    const user = getCurrentUser();
+    if (isOnline() && user) {
+      try {
+        await saveMistakeToCloud(mistake);
+      } catch (error) {
+        console.error('保存到雲端失敗，已標記為待同步', error);
+        await markForSync(`mistake_${mistakeId}`);
+      }
+    } else if (!isOnline()) {
+      // 離線狀態，標記為待同步
+      await markForSync(`mistake_${mistakeId}`);
+      toast.success('錯題已保存（離線模式）', {
+        duration: 2000,
+        icon: '📴'
+      });
+    }
+
+    return mistakeId;
+  } catch (error) {
+    console.error('保存錯題失敗', error);
+    toast.error('保存錯題失敗，請再試一次');
+    throw error;
+  }
+}
+
+/**
+ * 保存錯題到雲端
+ */
+async function saveMistakeToCloud(mistake: Mistake): Promise<void> {
+  const user = getCurrentUser();
+  if (!user || !db) return;
+
+  const mistakeRef = doc(db, 'users', user.uid, 'mistakes', mistake.id);
+  await setDoc(mistakeRef, {
+    ...mistake,
+    updatedAt: new Date().toISOString()
+  });
+}
+
+// 監聽網絡狀態變化，自動同步
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', async () => {
+    console.log('網絡連接已恢復，開始同步資料');
+    // 延遲一下確保連接穩定
+    setTimeout(syncOfflineChanges, 3000);
+  });
+} 
