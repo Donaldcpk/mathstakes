@@ -190,7 +190,7 @@ export async function generateMistakeInfoFromImage(imageUrl: string): Promise<Mi
       回答格式要求：
       - 只返回一個純JSON物件，不要使用markdown或代碼塊
       - 不要在JSON前後添加任何文字說明
-      - 不要使用反引號或markdown標記
+      - 不要使用任何標記符號，包括反引號和markdown標記
       - 確保輸出是有效的JSON格式
       
       JSON結構：
@@ -296,15 +296,15 @@ export async function generateMistakeInfoFromImage(imageUrl: string): Promise<Mi
       
       // 檢查是否包含常見的問題模式
       if (content.includes('```')) {
-        detailedError += '。數據可能包含markdown格式標記';
+        detailedError += '. 數據可能包含markdown格式標記';
       } else if (content.includes('\n')) {
-        detailedError += '。數據包含換行符';
+        detailedError += '. 數據包含換行符';
       } else if (content.includes('\\"') || content.includes('\\\\"')) {
-        detailedError += '。數據包含多重轉義字符';
+        detailedError += '. 數據包含多重轉義字符';
       }
       
       // 添加額外診斷資訊
-      detailedError += '。系統已嘗試自動修正，但仍然失敗。';
+      detailedError += '. 系統已嘗試自動修正，但仍然失敗。';
       
       throw handleApiError(new Error(detailedError));
     }
