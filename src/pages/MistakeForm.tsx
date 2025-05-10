@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { EducationLevel, TopicCategory, ErrorType } from '../types';
 import { generateMistakeInfoFromImage, generateAIExplanation } from '../utils/ai';
-import { saveMistake } from '../utils/storage';
+import { saveNewMistake } from '../utils/storage';
 import { showToast } from '../utils/toast';
 
 const subjects = [
@@ -215,7 +215,7 @@ const MistakeForm: React.FC = () => {
     
     const attemptSave = async (): Promise<boolean> => {
       try {
-        await saveMistake({
+        await saveNewMistake({
           title,
           content,
           subject,

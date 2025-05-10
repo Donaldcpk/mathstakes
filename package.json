@@ -10,8 +10,10 @@
     "deploy": "npm run build && firebase deploy --only hosting"
   },
   "dependencies": {
+    "@types/papaparse": "^5.3.16",
     "firebase": "^10.14.1",
     "localforage": "^1.10.0",
+    "papaparse": "^5.5.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-error-boundary": "^5.0.0",

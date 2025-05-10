@@ -188,7 +188,7 @@ export const getMistake = async (id: string): Promise<Mistake | null> => {
 };
 
 // 保存錯題
-export const saveMistake = async (
+export const saveNewMistake = async (
   mistake: Omit<Mistake, 'id' | 'createdAt'> & { createdAt?: string | Date }
 ): Promise<Mistake> => {
   try {
@@ -429,7 +429,7 @@ export const initializeSampleData = async (): Promise<void> => {
     // 分散儲存時間，使示例資料看起來更自然
     for (let i = 0; i < sampleMistakes.length; i++) {
       const date = i === 0 ? lastMonth : lastWeek;
-      await saveMistake({
+      await saveNewMistake({
         ...sampleMistakes[i],
         createdAt: date
       });
@@ -515,23 +515,29 @@ export async function syncOfflineChanges(): Promise<void> {
 }
 
 /**
- * 保存錯題到本地儲存
- * 如果離線，標記為需要同步
+ * 保存錯題到本地儲存和離線隊列
+ * 用於PWA離線功能
  */
-export async function saveMistake(mistake: Mistake, createdAt?: string): Promise<string> {
+export async function saveOfflineMistake(mistake: Mistake, createdAt?: string): Promise<string> {
   try {
-    // ... existing code ...
+    // 準備錯題數據
+    const mistakeId = mistake.id || uuidv4();
+    const finalMistake = {
+      ...mistake,
+      id: mistakeId,
+      createdAt: createdAt || new Date().toISOString()
+    };
 
     // 添加到本地儲存
     let mistakes = await localforage.getItem<Record<string, Mistake>>('mistakes') || {};
-    mistakes[mistakeId] = mistake;
+    mistakes[mistakeId] = finalMistake;
     await localforage.setItem('mistakes', mistakes);
 
     // 如果在線並且用戶已登入，嘗試保存到雲端
     const user = getCurrentUser();
     if (isOnline() && user) {
       try {
-        await saveMistakeToCloud(mistake);
+        await saveMistakeToCloud(finalMistake);
       } catch (error) {
         console.error('保存到雲端失敗，已標記為待同步', error);
         await markForSync(`mistake_${mistakeId}`);

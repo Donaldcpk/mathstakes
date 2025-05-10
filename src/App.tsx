@@ -6,9 +6,10 @@ import { ErrorBoundary } from 'react-error-boundary';
 import HomePage from './pages/HomePage';
 import MistakeList from './pages/MistakeList';
 import MistakeDetail from './pages/MistakeDetail';
-import MistakeForm from './pages/MistakeForm';
-import ProfileSetup from './pages/ProfileSetup';
+import MistakeFormFiveSteps from './pages/MistakeFormFiveSteps';
+import TestAI from './pages/TestAI';
 import OfflineIndicator from './components/OfflineIndicator';
+import CSVManager from './pages/CSVManager';
 
 // 全局錯誤處理組件
 interface ErrorFallbackProps {
@@ -70,10 +71,11 @@ function App() {
           <OfflineIndicator />
           <Routes>
             <Route path="/" element={<HomePage />} />
-            <Route path="/profile/setup" element={<PrivateRoute><ProfileSetup /></PrivateRoute>} />
             <Route path="/mistakes" element={<PrivateRoute><MistakeList /></PrivateRoute>} />
             <Route path="/mistakes/:id" element={<PrivateRoute><MistakeDetail /></PrivateRoute>} />
-            <Route path="/mistakes/new" element={<PrivateRoute><MistakeForm /></PrivateRoute>} />
+            <Route path="/mistakes/new" element={<PrivateRoute><MistakeFormFiveSteps /></PrivateRoute>} />
+            <Route path="/mistakes/csv" element={<CSVManager />} />
+            <Route path="/test-ai" element={<TestAI />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AuthProvider>

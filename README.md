@@ -2,18 +2,101 @@
 
 Mathstakes是一個幫助中學生從數學錯題中學習的Web應用程式。透過記錄、分析和複習錯題，學生可以更有效地發現並糾正自己的知識盲點。
 
-## 🚀 最新更新：效能大幅提升
+## 📅 最新更新（2023-10-01）
 
-我們剛完成了一系列重大效能優化，解決了載入緩慢和儲存失敗的問題：
+我們進行了一系列重大更新，以提升用戶體驗和功能：
 
-- **資料緩存機制**：所有錯題數據實現緩存，大幅減少載入時間
-- **離線優先策略**：確保即使網絡不穩定也能正常使用
-- **批量數據載入**：使用分頁加載方式，避免一次性載入大量數據
-- **AI響應緩存**：重複的圖片識別和解釋請求使用緩存，節約API調用
-- **重試機制**：自動重試失敗的請求，提高儲存成功率
-- **超時控制**：更合理的超時設置，避免無限等待
+- **優化登入流程**：移除了多餘的基本資料填寫步驟，現在使用Google帳號即可直接登入使用
+- **AI模型升級**：全面更換為Meta的最新Llama 4 Maverick模型，提升識別和回答質量
+- **全新錯題登記流程**：實現五步曲錯題登記流程，更加結構化和易於使用
+- **CSV匯出功能**：添加直接下載錯題記錄為CSV格式的功能，方便歸檔和分享
+- **錯題管理優化**：更好的錯題列表顯示和管理功能
 
-## 🌟 核心功能
+## 🌟 五步曲錯題登記流程
+
+我們全新設計的錯題登記流程包含五個清晰的步驟：
+
+1. **基本資訊**：選擇教育階段（初中/高中）、年級、主題分類和題目來源
+2. **題目識別**：上傳題目圖片，使用AI識別或手動輸入題目內容
+3. **錯誤分析**：選擇錯誤類型，記錄錯誤步驟和答案
+4. **AI解釋**：獲取智能AI分析，包含正確答案、常見錯誤和改進建議
+5. **總結與保存**：下載CSV記錄，並選擇是否保存到個人錯題本
+
+## 🔑 登入功能說明
+
+現在使用者可以通過任何Google帳號直接登入系統，無需填寫額外的基本資料。登入後立即可以使用所有功能，體驗更加流暢。
+
+## 📱 錯題管理功能
+
+登入後的主頁面顯示您的錯題列表，包含以下功能：
+
+- 按日期、類型和主題分類查看錯題
+- 下載所有錯題為CSV格式文件
+- 點擊任意錯題查看詳情和AI解釋
+- 一鍵添加新錯題
+
+## 💻 技術棧更新
+
+- **AI模型**：全面採用Meta Llama 4 Maverick模型
+- **前端**: React, TypeScript, TailwindCSS
+- **後端/數據**: Firebase (Firestore, Authentication)
+- **部署**: Vercel
+
+## 🔧 本地開發
+
+1. 克隆倉庫
+   ```
+   git clone https://github.com/your-username/mathstakes.git
+   cd mathstakes
+   ```
+
+2. 安裝依賴
+   ```
+   npm install
+   ```
+
+3. 設置環境變數
+   創建一個`.env.local`文件，添加Firebase配置信息：
+   ```
+   VITE_FIREBASE_API_KEY=AIzaSyBvSo54fPYT11tDeVkdC4mTgP2HqsgMb28
+   VITE_FIREBASE_AUTH_DOMAIN=mathstakes-app.firebaseapp.com
+   VITE_FIREBASE_PROJECT_ID=mathstakes-app
+   VITE_FIREBASE_STORAGE_BUCKET=mathstakes-app.firebasestorage.app
+   VITE_FIREBASE_MESSAGING_SENDER_ID=73353927746
+   VITE_FIREBASE_APP_ID=1:73353927746:web:44d2814fe3c0e81b2161db
+   VITE_FIREBASE_MEASUREMENT_ID=G-PFEBG1ZN30
+   ```
+
+4. 啟動開發伺服器
+   ```
+   npm run dev
+   ```
+
+## 📋 更新日誌
+
+### 2023-10-01
+- 移除用戶資料設置步驟，簡化登入流程
+- 更換AI模型為Meta Llama 4 Maverick
+- 實現五步曲錯題登記流程
+- 添加CSV匯出功能
+- 優化錯題管理和顯示
+
+### 之前版本
+- 實現PWA功能，支持離線使用
+- 優化性能，提升載入速度
+- 添加錯題統計和分類功能
+- 實現基本的錯題管理功能
+
+## 🌐 部署
+
+應用已部署在Vercel上，可通過以下鏈接訪問：
+[https://mathstakes.vercel.app](https://mathstakes.vercel.app)
+
+## 📄 許可證
+
+本項目使用MIT許可證 - 詳見LICENSE檔案
+
+## 🚀 核心功能
 
 1. **智能收集錯題**
    - 拍照上傳: 使用AI識別題目內容
@@ -45,13 +128,6 @@ Mathstakes是一個幫助中學生從數學錯題中學習的Web應用程式。�
 - AI生成解釋
 - 本地和雲端數據存儲
 - 簡潔直觀的用戶界面
-
-## 💻 技術堆棧
-
-- **前端**: React, TypeScript, TailwindCSS
-- **後端/數據**: Firebase (Firestore, Authentication)
-- **人工智能**: OpenRouter API (GPT-4o, Claude-3)
-- **部署**: Vercel
 
 ## 🔑 API 設置
 

@@ -51,12 +51,8 @@ export const googleProvider = new GoogleAuthProvider();
 // 添加自定義參數，確保登入流程順暢
 googleProvider.setCustomParameters({
   prompt: 'select_account',
-  // 允許任何域名 - 用於測試環境
-  hd: '*',
-  // 要求同意基本資料
-  access_type: 'offline',
-  // 強制獲取更新後的令牌
-  include_granted_scopes: 'true'
+  // 允許任何Google帳號登入
+  hd: '*'
 });
 
 // 當前登入的用戶

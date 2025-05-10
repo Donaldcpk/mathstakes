@@ -1,14 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from 'firebase/auth';
-import { auth, signInWithGoogle, signOut, isUserProfileComplete, getRedirectResult } from '../utils/firebase';
+import { auth, signInWithGoogle, signOut, getRedirectResult } from '../utils/firebase';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 interface AuthContextType {
   currentUser: User | null;
   loading: boolean;
-  isProfileComplete: boolean;
-  checkProfileComplete: (userId: string) => Promise<boolean>;
   login: () => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -30,20 +28,7 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [isProfileComplete, setIsProfileComplete] = useState<boolean>(false);
   const navigate = useNavigate();
-
-  // 檢查用戶資料是否完整
-  const checkProfileComplete = async (userId: string): Promise<boolean> => {
-    try {
-      const isComplete = await isUserProfileComplete(userId);
-      setIsProfileComplete(isComplete);
-      return isComplete;
-    } catch (error) {
-      console.error('檢查用戶資料時出錯', error);
-      return false;
-    }
-  };
 
   // 處理重定向登入結果
   useEffect(() => {
@@ -68,26 +53,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             icon: '👋',
           });
           
-          // 檢查用戶資料是否完整
-          const isComplete = await checkProfileComplete(result.user.uid);
-          console.log('用戶資料是否完整:', isComplete, new Date().toISOString());
+          // 導航至錯題列表頁
+          console.log('導航至錯題列表頁', new Date().toISOString());
           
-          // 根據資料完整性導向不同頁面
-          if (isComplete) {
-            console.log('導航至錯題列表頁', new Date().toISOString());
-            
-            // 使用強制頁面刷新處理第三方Cookie或導航問題
-            setTimeout(() => {
-              window.location.href = '/mistakes';
-            }, 500);
-          } else {
-            console.log('導航至資料設置頁', new Date().toISOString());
-            
-            // 使用強制頁面刷新處理第三方Cookie或導航問題
-            setTimeout(() => {
-              window.location.href = '/profile/setup';
-            }, 500);
-          }
+          // 使用強制頁面刷新處理第三方Cookie或導航問題
+          setTimeout(() => {
+            window.location.href = '/mistakes';
+          }, 500);
         } else {
           console.log('沒有重定向結果或用戶信息為空', new Date().toISOString());
         }
@@ -114,11 +86,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
       console.log('用戶狀態變化', user ? user.email : '未登入');
       setCurrentUser(user);
-      
-      if (user) {
-        await checkProfileComplete(user.uid);
-      }
-      
       setLoading(false);
     });
 
@@ -143,26 +110,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           icon: '👋',
         });
         
-        // 檢查用戶資料是否完整
-        const isComplete = await checkProfileComplete(user.uid);
-        console.log('資料完整性檢查結果:', isComplete, new Date().toISOString());
+        // 導航至錯題列表頁
+        console.log('導航至錯題列表頁', new Date().toISOString());
         
-        // 根據資料完整性導向不同頁面
-        if (isComplete) {
-          console.log('導航至錯題列表頁', new Date().toISOString());
-          
-          // 使用強制頁面刷新處理第三方Cookie或導航問題
-          setTimeout(() => {
-            window.location.href = '/mistakes';
-          }, 500);
-        } else {
-          console.log('導航至設置頁', new Date().toISOString());
-          
-          // 使用強制頁面刷新處理第三方Cookie或導航問題
-          setTimeout(() => {
-            window.location.href = '/profile/setup';
-          }, 500);
-        }
+        // 使用強制頁面刷新處理第三方Cookie或導航問題
+        setTimeout(() => {
+          window.location.href = '/mistakes';
+        }, 500);
       } else {
         console.log('彈出窗口登入未返回用戶資料，可能使用了重定向', new Date().toISOString());
         // 重定向方式會在 handleRedirectResult 中處理
@@ -192,7 +146,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setLoading(true);
       await signOut();
       setCurrentUser(null);
-      setIsProfileComplete(false);
       toast.success('已成功登出，期待您的下次使用', {
         duration: 3000,
         icon: '👋',
@@ -211,8 +164,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const value: AuthContextType = {
     currentUser,
     loading,
-    isProfileComplete,
-    checkProfileComplete,
     login,
     logout
   };
