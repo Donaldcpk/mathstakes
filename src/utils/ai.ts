@@ -233,7 +233,8 @@ export async function generateMistakeInfoFromImage(imageUrl: string): Promise<Mi
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiConfig.apiKey}`,
             'HTTP-Referer': window.location.origin,
-            'X-Title': 'Mathstakes'
+            'X-Title': 'Mathstakes',
+            'User-Agent': 'Mozilla/5.0 Mathstakes Education App'
           },
           body: JSON.stringify(requestBody)
         });
@@ -419,7 +420,8 @@ export const generateAIExplanation = async (mistake: Mistake): Promise<string> =
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiConfig.apiKey}`,
             'HTTP-Referer': window.location.origin,
-            'X-Title': 'Mathstakes'
+            'X-Title': 'Mathstakes',
+            'User-Agent': 'Mozilla/5.0 Mathstakes Education App'
           },
           body: JSON.stringify(requestBody)
         });
