@@ -943,36 +943,46 @@ const MistakeFormFiveSteps: React.FC = () => {
     <div className="space-y-6">
       <h3 className="text-lg font-medium text-gray-900">步驟 4：AI 解釋</h3>
       
-      {/* 顯示錯題標題和內容，供用戶參考 */}
-      <div className="bg-white rounded-md border border-gray-200 p-4 mb-4">
+      {/* 顯示題目和內容的區塊 */}
+      <div className="bg-gray-50 p-4 rounded-md mb-4">
         <h4 className="text-md font-medium text-gray-900 mb-2">錯題資訊</h4>
-        <div className="space-y-2">
-          <p><strong>標題：</strong> {title}</p>
-          <p><strong>內容：</strong> {content}</p>
-          <div className="flex flex-wrap gap-2 mt-2">
+        <div className="flex flex-wrap gap-2 mb-3">
+          {subject && (
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
               {subject}
             </span>
+          )}
+          {educationLevel && (
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-              {grade}
+              {educationLevel === 'JUNIOR_HIGH' ? '初中' : '高中'}
             </span>
+          )}
+          {topic && (
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-              {topicCategory}
+              {topic}
             </span>
-          </div>
+          )}
+        </div>
+        <div className="text-gray-900">
+          <p className="font-bold">題目：{title}</p>
+          <p className="mt-2 whitespace-pre-wrap">{content}</p>
         </div>
       </div>
       
-      {explanation ? (
-        <div className="mt-4 p-4 bg-gray-50 rounded-md border border-gray-200 whitespace-pre-line">
-          <h4 className="text-md font-medium text-gray-900 mb-2">AI 分析結果</h4>
-          <div className="prose max-w-none text-sm">{explanation}</div>
+      <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
+        <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+          <h3 className="text-md font-medium text-gray-900">AI 分析結果</h3>
         </div>
-      ) : (
-        <p className="text-gray-500 italic">
-          AI 解釋尚未生成，請返回上一步生成解釋。
-        </p>
-      )}
+        <div className="p-4 prose max-w-none text-sm">
+          {explanation ? (
+            explanation
+          ) : (
+            <p className="text-gray-500 italic">
+              AI 解釋尚未生成，請返回上一步生成解釋。
+            </p>
+          )}
+        </div>
+      </div>
       
       <div className="pt-5">
         <div className="flex justify-between">
@@ -1205,7 +1215,7 @@ const MistakeFormFiveSteps: React.FC = () => {
     <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
       <div className="mb-8 text-center">
         <h2 className="text-3xl font-extrabold text-gray-900">添加錯題</h2>
-        <p className="mt-4 text-lg text-gray-500">
+        <p className="mt-4 text-lg text-gray-900">
           記錄、分析並從錯題中學習，讓每一個錯誤都成為進步的階梯。
         </p>
       </div>

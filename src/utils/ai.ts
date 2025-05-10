@@ -190,7 +190,7 @@ export async function generateMistakeInfoFromImage(imageUrl: string): Promise<Mi
       回答格式要求：
       - 只返回一個純JSON物件，不要使用markdown或代碼塊
       - 不要在JSON前後添加任何文字說明
-      - 不要使用任何標記符號，包括反引號和markdown標記
+      - 不要使用標記符號，不要使用反引號，不要使用markdown語法
       - 確保輸出是有效的JSON格式
       
       JSON結構：
@@ -234,7 +234,8 @@ export async function generateMistakeInfoFromImage(imageUrl: string): Promise<Mi
             'Authorization': `Bearer ${apiConfig.apiKey}`,
             'HTTP-Referer': window.location.origin,
             'X-Title': 'Mathstakes',
-            'User-Agent': 'Mozilla/5.0 Mathstakes Education App'
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Mathstakes Education App',
+            'Accept': 'application/json'
           },
           body: JSON.stringify(requestBody)
         });
@@ -421,7 +422,8 @@ export const generateAIExplanation = async (mistake: Mistake): Promise<string> =
             'Authorization': `Bearer ${apiConfig.apiKey}`,
             'HTTP-Referer': window.location.origin,
             'X-Title': 'Mathstakes',
-            'User-Agent': 'Mozilla/5.0 Mathstakes Education App'
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Mathstakes Education App',
+            'Accept': 'application/json'
           },
           body: JSON.stringify(requestBody)
         });

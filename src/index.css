@@ -27,11 +27,11 @@ body {
 /* 暗模式樣式 */
 @media (prefers-color-scheme: dark) {
   body {
-    background-color: #1e293b;
+    background-color: #2c3e5a;
     background-image: 
-      radial-gradient(at 80% 0%, rgba(79, 70, 229, 0.1) 0px, transparent 50%),
-      radial-gradient(at 0% 50%, rgba(124, 58, 237, 0.1) 0px, transparent 50%),
-      radial-gradient(at 80% 100%, rgba(14, 165, 233, 0.1) 0px, transparent 50%);
+      radial-gradient(at 80% 0%, rgba(79, 70, 229, 0.15) 0px, transparent 50%),
+      radial-gradient(at 0% 50%, rgba(124, 58, 237, 0.15) 0px, transparent 50%),
+      radial-gradient(at 80% 100%, rgba(14, 165, 233, 0.15) 0px, transparent 50%);
     color: #f1f5f9;
   }
 }
@@ -59,25 +59,25 @@ body {
 
 /* 提高表單元素的可見度 */
 input, select, textarea {
-  border: 1px solid rgba(0, 0, 0, 0.2) !important;
+  border: 2px solid rgba(0, 0, 0, 0.3) !important;
   color: #000 !important;
   background-color: #fff !important;
 }
 
 .dark input, .dark select, .dark textarea {
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border: 2px solid rgba(255, 255, 255, 0.3) !important;
   color: #fff !important;
-  background-color: #1e293b !important;
+  background-color: #283548 !important;
 }
 
 /* 提高標籤文字可讀性 */
 label {
   color: #000 !important;
-  font-weight: 500 !important;
+  font-weight: 600 !important;
 }
 
 .dark label {
-  color: #fff !important;
+  color: #f3f4f6 !important;
 }
 
 /* 動畫效果 */
