@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Mistake, EducationLevel } from '../types';
+import { Mistake } from '../types';
 import { getMistake, deleteMistake as deleteFromStorage, addExplanation } from '../utils/storage';
 import { generateAIExplanation } from '../utils/ai';
 import MathDisplay from '../components/MathDisplay';
+import { IoArrowBack, IoTrash, IoRefresh } from 'react-icons/io5';
 
 // 格式化日期函數
 const formatDate = (dateString: string | Date): string => {
@@ -26,48 +27,46 @@ const MistakeDetail: React.FC = () => {
   const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState<number>(0);
   const [retryCount, setRetryCount] = useState(0);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // 從本地儲存獲取資料
-  const fetchMistake = useCallback(async () => {
-    if (!id) {
-      setIsLoading(false);
-      return;
-    }
-
-    setLoadingError(null);
-    
-    // 模擬進度條
-    const progressInterval = setInterval(() => {
-      setLoadingProgress(prev => {
-        const newProgress = prev + Math.random() * 15;
-        return newProgress > 90 ? 90 : newProgress;
-      });
-    }, 300);
-
-    try {
-      console.time(`fetch-mistake-${id}`);
-      const mistakeData = await getMistake(id);
-      console.timeEnd(`fetch-mistake-${id}`);
-      
-      if (mistakeData) {
-        setMistake(mistakeData);
-        setLoadingProgress(100);
-      } else {
-        setLoadingError('無法找到此錯題，它可能已被刪除或從未存在。');
-      }
-    } catch (error) {
-      console.error(`獲取錯題 ID ${id} 失敗：`, error);
-      setLoadingError(error instanceof Error ? error.message : '載入錯題失敗，請稍後再試。');
-    } finally {
-      clearInterval(progressInterval);
-      setIsLoading(false);
-    }
-  }, [id]);
-
-  // 初始加載和重試機制
   useEffect(() => {
+    const fetchMistake = async () => {
+      if (!id) {
+        setLoadingError('無效的錯題ID');
+        setIsLoading(false);
+        return;
+      }
+      
+      setIsLoading(true);
+      setLoadingError(null);
+      
+      try {
+        // 模擬加載進度
+        const progressInterval = setInterval(() => {
+          setLoadingProgress(prev => Math.min(prev + 5, 90));
+        }, 100);
+        
+        const data = await getMistake(id);
+        
+        clearInterval(progressInterval);
+        setLoadingProgress(100);
+        
+        if (data) {
+          setMistake(data);
+        } else {
+          setLoadingError('找不到此錯題，可能已被刪除');
+        }
+      } catch (error) {
+        console.error('獲取錯題詳情失敗：', error);
+        setLoadingError('載入錯題詳情時出錯，請稍後再試');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
     fetchMistake();
-  }, [fetchMistake, retryCount]);
+  }, [id, retryCount]);
 
   // 生成 AI 解釋
   const getAIExplanation = useCallback(async () => {
@@ -96,9 +95,7 @@ const MistakeDetail: React.FC = () => {
 
   // 刪除錯題
   const handleDeleteMistake = useCallback(async () => {
-    if (!id || !window.confirm('確定要刪除這個錯題嗎？此操作無法復原。')) {
-      return;
-    }
+    if (!id) return;
     
     try {
       console.time('delete-mistake');
@@ -106,7 +103,7 @@ const MistakeDetail: React.FC = () => {
       console.timeEnd('delete-mistake');
       
       if (success) {
-        alert('錯題已成功刪除！');
+        setShowDeleteModal(false);
         navigate('/mistakes');
       } else {
         alert('刪除錯題失敗，請稍後再試。');
@@ -122,84 +119,24 @@ const MistakeDetail: React.FC = () => {
     setRetryCount(prev => prev + 1);
   }, []);
 
-  if (isLoading) {
-    return (
-      <div className="bg-white shadow-lg rounded-lg overflow-hidden p-8">
-        <div className="flex flex-col items-center justify-center h-64">
-          <div className="w-full max-w-md bg-gray-200 rounded-full h-4 mb-4">
-            <div 
-              className="bg-indigo-600 h-4 rounded-full transition-all duration-300 ease-out"
-              style={{ width: `${loadingProgress}%` }}
-            ></div>
-          </div>
-          <p className="text-gray-700 text-lg font-medium">正在載入錯題資料...</p>
-          <p className="text-gray-500 text-sm mt-2">請稍候，我們正在獲取您的錯題詳情</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (loadingError) {
-    return (
-      <div className="bg-white shadow-lg rounded-lg overflow-hidden p-8 text-center">
-        <div className="flex flex-col items-center justify-center h-64">
-          <svg className="w-16 h-16 text-red-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">載入失敗</h2>
-          <p className="text-lg text-gray-600 mb-6">{loadingError}</p>
-          <div className="flex space-x-4">
-            <button
-              onClick={handleRetry}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
-            >
-              重新載入
-            </button>
-            <Link 
-              to="/mistakes" 
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
-            >
-              返回錯題列表
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!mistake) {
-    return (
-      <div className="bg-white shadow-lg rounded-lg overflow-hidden p-8 text-center">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">找不到錯題</h2>
-        <p className="text-lg text-gray-500 mb-6">找不到 ID 為 {id} 的錯題。它可能已被刪除或從未存在。</p>
+  return (
+    <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <div className="flex justify-between items-center mb-6">
         <Link 
           to="/mistakes" 
-          className="inline-flex items-center px-5 py-2.5 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
+          className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
         >
+          <IoArrowBack className="mr-1.5 -ml-1 h-5 w-5" />
           返回錯題列表
         </Link>
-      </div>
-    );
-  }
-
-  // 渲染錯題詳情
-  return (
-    <div className="container mx-auto px-4 py-8">
-      {/* 返回和麵包屑導航 */}
-      <div className="mb-6 flex items-center">
+        
         <button
-          onClick={() => navigate('/mistakes')}
-          className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 mr-4"
+          onClick={() => setShowDeleteModal(true)}
+          className="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
         >
-          <svg className="-ml-1 mr-2 h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
-          返回列表
+          <IoTrash className="mr-1.5 -ml-1 h-5 w-5" />
+          刪除錯題
         </button>
-        <nav className="breadcrumb-item text-sm text-gray-500">
-          <span>錯題簿</span>
-          <span>{mistake?.title || '錯題詳情'}</span>
-        </nav>
       </div>
       
       {isLoading ? (
@@ -218,164 +155,149 @@ const MistakeDetail: React.FC = () => {
               <p className="text-sm text-red-700">{loadingError}</p>
             </div>
           </div>
-        </div>
-      ) : !mistake ? (
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-md">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-yellow-700">找不到該錯題，可能已被刪除。</p>
-            </div>
+          <div className="mt-4">
+            <button
+              onClick={handleRetry}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            >
+              <IoRefresh className="mr-1.5 -ml-1 h-5 w-5" />
+              重試載入
+            </button>
           </div>
         </div>
-      ) : (
-        <div className="space-y-8">
-          {/* 錯題詳情卡片 */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden hover-lift neon-border">
-            <div className="px-6 py-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-gray-800 dark:to-gray-750">
-              <div className="flex justify-between items-start">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white gradient-text">
-                  {mistake.title}
-                </h1>
-                <div className="flex space-x-2">
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
-                    {mistake.subject}
-                  </span>
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                    {mistake.educationLevel}
-                  </span>
-                </div>
-              </div>
-              <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                <span className="inline-block mr-4">
-                  📅 {formatDate(mistake.createdAt)}
-                </span>
-                {mistake.topicCategory && (
-                  <span className="inline-block">
-                    📚 {mistake.topicCategory}
-                  </span>
-                )}
-              </div>
-            </div>
-            
-            {/* 題目內容 */}
-            <div className="px-6 py-6 bg-white dark:bg-gray-800">
-              <div className="prose dark:prose-invert max-w-none">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">題目內容</h3>
-                <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg whitespace-pre-line">
-                  {mistake.content}
-                </div>
-                
-                {mistake.imageUrl && (
-                  <div className="mt-6">
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">題目圖片</h3>
-                    <div className="mt-2 flex justify-center">
-                      <img 
-                        src={mistake.imageUrl} 
-                        alt="題目圖片" 
-                        className="max-h-96 max-w-full rounded-lg shadow-md hover:shadow-xl transition-shadow duration-300" 
-                        onClick={() => window.open(mistake.imageUrl, '_blank')}
-                      />
-                    </div>
-                  </div>
-                )}
-                
-                {mistake.errorSteps && (
-                  <div className="mt-6">
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">錯誤步驟</h3>
-                    <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg whitespace-pre-line text-red-800 dark:text-red-200">
-                      {mistake.errorSteps}
-                    </div>
-                  </div>
-                )}
-                
-                {mistake.explanation ? (
-                  <div className="mt-6">
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">AI分析與解釋</h3>
-                    <div className="p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg shadow-inner whitespace-pre-line">
-                      <MathDisplay content={mistake.explanation} />
-                    </div>
-                    
-                    {/* 額外的LaTeX公式顯示區，僅當識別到公式時才顯示 */}
-                    {mistake.explanation.includes('\\') && (
-                      <div className="mt-4 p-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
-                        <h4 className="text-md font-medium text-gray-900 dark:text-white mb-3">數學公式渲染</h4>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                          以下是解釋中包含的數學公式的漂亮顯示，更容易閱讀：
-                        </p>
-                        <MathDisplay content={mistake.explanation} />
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="mt-6">
-                    <div className="text-center py-8 px-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-                      <svg className="mx-auto h-12 w-12 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <h3 className="mt-2 text-sm font-medium text-yellow-800 dark:text-yellow-200">尚未生成AI解釋</h3>
-                      <p className="mt-1 text-sm text-yellow-700 dark:text-yellow-300">點擊下方按鈕生成關於這個錯題的AI分析</p>
-                      <div className="mt-6">
-                        <button
-                          type="button"
-                          onClick={getAIExplanation}
-                          disabled={isGeneratingExplanation}
-                          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 disabled:opacity-50"
-                        >
-                          {isGeneratingExplanation ? (
-                            <>
-                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              生成解釋中...
-                            </>
-                          ) : '生成AI解釋'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+      ) : mistake ? (
+        <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+          <div className="px-4 py-5 sm:px-6 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900">
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              {mistake.title}
+            </h3>
+            <div className="flex flex-wrap gap-2 mt-2">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                {mistake.subject}
+              </span>
             </div>
           </div>
           
-          {/* 操作按鈕 */}
-          <div className="flex justify-between items-center mt-8 space-x-4">
-            <button
-              onClick={() => setShowDeleteModal(true)}
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-            >
-              <svg className="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-              刪除錯題
-            </button>
-            
-            <div className="flex space-x-4">
-              <button
-                onClick={() => navigate('/mistakes/new')}
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                <svg className="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                添加新錯題
-              </button>
+          <div className="border-t border-gray-200 px-4 py-5 sm:p-6">
+            <div className="prose prose-blue max-w-none dark:prose-invert">
+              <div className="mb-6">
+                <h2 className="text-lg font-medium text-gray-900 dark:text-white">錯題內容</h2>
+                <div className="mt-2 text-gray-800 dark:text-gray-300 whitespace-pre-wrap">
+                  {mistake.content}
+                </div>
+              </div>
               
-              <Link
-                to="/mistakes/csv"
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+              {mistake.imageUrls && mistake.imageUrls.length > 0 && (
+                <div className="mb-6">
+                  <h2 className="text-lg font-medium text-gray-900 dark:text-white">錯題圖片</h2>
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {mistake.imageUrls.map((url, index) => (
+                      <div key={index} className="overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
+                        <img 
+                          src={url} 
+                          alt={`錯題圖片 ${index + 1}`}
+                          className="w-full object-contain h-64"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <div className="mb-6">
+                <h2 className="text-lg font-medium text-gray-900 dark:text-white">錯誤類型</h2>
+                <div className="mt-2">
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300">
+                    {mistake.errorType}
+                  </span>
+                </div>
+              </div>
+              
+              {mistake.description && (
+                <div className="mb-6">
+                  <h2 className="text-lg font-medium text-gray-900 dark:text-white">錯誤描述</h2>
+                  <div className="mt-2 text-gray-600 dark:text-gray-400">
+                    {mistake.description}
+                  </div>
+                </div>
+              )}
+              
+              <div className="mb-6">
+                <h2 className="text-lg font-medium text-gray-900 dark:text-white">其他信息</h2>
+                <div className="mt-2 text-gray-600 dark:text-gray-400">
+                  <p>創建時間：{formatDate(mistake.createdAt)}</p>
+                </div>
+              </div>
+              
+              {mistake.aiExplanation ? (
+                <div className="mt-6">
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">AI分析與解釋</h3>
+                  <div className="p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg shadow-inner whitespace-pre-line">
+                    <MathDisplay content={mistake.aiExplanation} />
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-6">
+                  <div className="text-center py-8 px-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                    <svg className="mx-auto h-12 w-12 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <h3 className="mt-2 text-sm font-medium text-yellow-800 dark:text-yellow-200">尚未生成AI解釋</h3>
+                    <p className="mt-1 text-sm text-yellow-700 dark:text-yellow-300">點擊下方按鈕生成關於這個錯題的AI分析</p>
+                    <div className="mt-6">
+                      <button
+                        type="button"
+                        onClick={getAIExplanation}
+                        disabled={isGeneratingExplanation}
+                        className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 disabled:opacity-50"
+                      >
+                        {isGeneratingExplanation ? (
+                          <>
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            生成解釋中...
+                          </>
+                        ) : '生成AI解釋'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+      
+      {/* 刪除確認對話框 */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
+            <div className="text-center mb-4">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <IoTrash className="h-6 w-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900">確認刪除</h3>
+              <p className="text-sm text-gray-500 mt-2">
+                您確定要刪除這個錯題嗎？此操作無法撤銷，所有相關數據將被永久刪除。
+              </p>
+            </div>
+            <div className="flex justify-center space-x-4 mt-4">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                className="inline-flex justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
               >
-                <svg className="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                </svg>
-                管理CSV記錄
-              </Link>
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteMistake}
+                className="inline-flex justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              >
+                確認刪除
+              </button>
             </div>
           </div>
         </div>

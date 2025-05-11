@@ -1,87 +1,61 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { Mistake, EducationLevel } from '../types';
-import { getMistakes, initializeSampleData, clearMistakesCache } from '../utils/storage';
+import { Link, useNavigate } from 'react-router-dom';
+import { Mistake, EducationLevel, Subject } from '../types';
+import { getMistakes, initializeSampleData, clearMistakesCache, getMistakesCount } from '../utils/storage';
 import { exportToExcel } from '../utils/excel';
-
-// 格式化日期函數
-const formatDate = (dateString: string | Date): string => {
-  const date = new Date(dateString);
-  const year = date.getFullYear();
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
-  const weekDay = weekDays[date.getDay()];
-  
-  return `${year}年${month}月${day}日 (星期${weekDay})`;
-};
+import { formatDate } from '../utils/helpers';
+import ConfettiExplosion from 'react-confetti-explosion';
+import CSVImportExport from '../components/CSVImportExport';
+import { IoAdd, IoSearch, IoFunnel, IoCloudDownload } from 'react-icons/io5';
+import { FaRegSadTear } from 'react-icons/fa';
+import { exportMistakesToExcel } from '../utils/excelExport';
 
 const MistakeList: React.FC = () => {
+  const navigate = useNavigate();
   const [mistakes, setMistakes] = useState<Mistake[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterSubject, setFilterSubject] = useState('');
-  const [filterLevel, setFilterLevel] = useState<string>('');
+  const [filteredMistakes, setFilteredMistakes] = useState<Mistake[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingError, setLoadingError] = useState<string | null>(null);
-  const [loadingProgress, setLoadingProgress] = useState<number>(0);
-  const [isFetching, setIsFetching] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedSubjects, setSelectedSubjects] = useState<Subject[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
+  const [isExploding, setIsExploding] = useState(false);
+  const [showCSVModal, setShowCSVModal] = useState(false);
+  const [importSuccess, setImportSuccess] = useState(false);
+  const [allMistakesCount, setAllMistakesCount] = useState(0);
+  const [csvImportLoading, setCsvImportLoading] = useState(false);
 
   // 從本地儲存獲取資料
-  const fetchMistakes = useCallback(async (showLoadingUI = true) => {
-    if (isFetching) return; // 防止重複請求
+  const fetchMistakes = useCallback(async () => {
+    setIsLoading(true);
+    setLoadingError(null);
     
     try {
-      if (showLoadingUI) {
-        setLoadingError(null);
-        setIsLoading(true);
-        setLoadingProgress(0);
-      }
-      
-      setIsFetching(true);
-      
-      // 實現分批加載
-      let initialDataLoaded = false;
-      
-      // 模擬進度條
-      const progressInterval = showLoadingUI ? setInterval(() => {
-        setLoadingProgress(prev => {
-          if (initialDataLoaded) return Math.min(prev + 5, 90);
-          return Math.min(prev + Math.random() * 8, 70);
-        });
-      }, 300) : null;
-      
-      // 先加載基本示例數據，讓用戶可以快速看到畫面
-      await initializeSampleData();
-      initialDataLoaded = true;
-      
-      if (showLoadingUI) {
-        setLoadingProgress(75);
-      }
-      
-      // 獲取所有錯題（可能較慢的操作）
+      console.time('fetch-mistakes');
       const data = await getMistakes();
-      setMistakes(data);
+      const count = await getMistakesCount();
+      console.timeEnd('fetch-mistakes');
       
-      if (showLoadingUI) {
-        setLoadingProgress(100);
-        if (progressInterval) clearInterval(progressInterval);
-      }
+      setMistakes(data);
+      setFilteredMistakes(data);
+      setAllMistakesCount(count);
+      
+      // 提取所有科目用於過濾
+      const uniqueSubjects = Array.from(new Set(data.map(m => m.subject)))
+        .filter(Boolean) as Subject[];
+      setSubjects(uniqueSubjects);
     } catch (error) {
-      console.error('獲取錯題失敗：', error);
-      if (showLoadingUI) {
-        setLoadingError(error instanceof Error ? error.message : '載入錯題資料失敗，請稍後再試');
-      }
+      console.error('Failed to fetch mistakes:', error);
+      setLoadingError('無法載入錯題列表，請稍後再試');
     } finally {
-      if (showLoadingUI) {
-        setIsLoading(false);
-      }
-      setIsFetching(false);
+      setIsLoading(false);
     }
-  }, [isFetching]);
+  }, []);
 
   // 初始加載
   useEffect(() => {
-    fetchMistakes(true);
+    fetchMistakes();
   }, [fetchMistakes]);
   
   // 監聽背景數據更新事件
@@ -108,297 +82,457 @@ const MistakeList: React.FC = () => {
     return mistakes.filter(mistake => {
       const matchesSearch = mistake.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           mistake.content.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesSubject = filterSubject ? mistake.subject === filterSubject : true;
-      const matchesLevel = filterLevel ? mistake.educationLevel === filterLevel : true;
+      const matchesSubject = selectedSubjects.length === 0 || selectedSubjects.includes(mistake.subject);
+      const matchesLevel = mistake.educationLevel === filterLevel;
       return matchesSearch && matchesSubject && matchesLevel;
     });
-  }, [mistakes, searchTerm, filterSubject, filterLevel]);
+  }, [mistakes, searchTerm, selectedSubjects, filterLevel]);
 
-  // 獲取所有科目（用於過濾）
-  const subjects = useMemo(() => {
-    return Array.from(new Set(mistakes.map(m => m.subject)));
-  }, [mistakes]);
+  const handleCSVImportSuccess = () => {
+    setCsvImportLoading(false);
+    setImportSuccess(true);
+    setShowCSVModal(false);
+    setIsExploding(true);
+    setTimeout(() => {
+      setImportSuccess(false);
+      fetchMistakes();
+    }, 3000);
+  };
 
-  // 重新加載資料
-  const handleReload = useCallback(async () => {
-    // 清除緩存，確保獲取最新數據
-    clearMistakesCache();
-    await fetchMistakes(true);
-  }, [fetchMistakes]);
+  const handleCSVImportStart = () => {
+    setCsvImportLoading(true);
+  };
 
-  // 匯出為 Excel
-  const handleExportToExcel = useCallback(() => {
-    if (filteredMistakes.length === 0) {
-      alert('沒有可匯出的錯題！');
-      return;
-    }
-    
-    try {
-      exportToExcel(filteredMistakes);
-    } catch (error) {
-      console.error('匯出到 Excel 失敗：', error);
-      alert('匯出到 Excel 失敗，請稍後再試。');
-    }
-  }, [filteredMistakes]);
-  
-  // 搜尋和過濾處理函數
-  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
-  }, []);
-  
-  const handleSubjectFilterChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilterSubject(e.target.value);
-  }, []);
-  
-  const handleLevelFilterChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilterLevel(e.target.value);
-  }, []);
-
-  if (isLoading) {
+  const renderEmptyState = () => {
     return (
-      <div className="bg-white shadow-lg rounded-lg overflow-hidden p-8">
-        <div className="flex flex-col items-center justify-center py-12">
-          <div className="w-full max-w-md bg-gray-200 rounded-full h-4 mb-4">
-            <div 
-              className="bg-indigo-600 h-4 rounded-full transition-all duration-300 ease-out"
-              style={{ width: `${loadingProgress}%` }}
-            ></div>
-          </div>
-          <p className="text-gray-700 text-lg font-medium">正在載入錯題資料...</p>
-          <p className="text-gray-500 text-sm mt-2">請稍候，我們正在獲取您的錯題列表</p>
+      <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+        <FaRegSadTear className="w-20 h-20 text-gray-300 mb-4" />
+        <h3 className="text-xl font-medium text-gray-700 mb-2">目前還沒有收集到錯題</h3>
+        <p className="text-gray-500 max-w-md mb-6">
+          開始收集你的錯題，讓學習更有效率。您可以新增錯題或從CSV檔案匯入。
+        </p>
+        <div className="flex flex-wrap gap-4 justify-center">
+          <button
+            onClick={() => navigate('/add-mistake')}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg flex items-center shadow-md hover:bg-blue-700 transition-colors"
+          >
+            <IoAdd className="mr-2" /> 新增錯題
+          </button>
+          <button
+            onClick={() => setShowCSVModal(true)}
+            className="px-6 py-3 bg-green-600 text-white rounded-lg flex items-center shadow-md hover:bg-green-700 transition-colors"
+          >
+            <IoCloudDownload className="mr-2" /> 匯入CSV
+          </button>
         </div>
       </div>
     );
-  }
+  };
 
-  if (loadingError) {
+  const renderLoadingState = () => {
     return (
-      <div className="bg-white shadow-lg rounded-lg overflow-hidden p-8 text-center">
-        <div className="flex flex-col items-center justify-center py-12">
-          <svg className="w-16 h-16 text-red-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">載入失敗</h2>
-          <p className="text-lg text-gray-600 mb-6">{loadingError}</p>
-          <div className="flex space-x-4">
+      <div className="flex flex-col items-center justify-center py-16">
+        <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
+        <p className="text-gray-600">正在載入錯題列表...</p>
+      </div>
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
+        {isExploding && <ConfettiExplosion duration={3000} particleCount={100} />}
+        
+        {importSuccess && (
+          <div className="fixed top-4 right-4 bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded shadow-md z-50">
+            <p className="font-bold">匯入成功！</p>
+            <p>您的錯題已成功匯入系統。</p>
+          </div>
+        )}
+        
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold text-gray-800">我的錯題集</h1>
+          <div className="flex space-x-2">
             <button
-              onClick={handleReload}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+              onClick={() => navigate('/add-mistake')}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center hover:bg-blue-700 transition-colors"
             >
-              重新載入
+              <IoAdd className="mr-1" /> 新增
             </button>
-            <Link 
-              to="/" 
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+            <button
+              onClick={() => setShowCSVModal(true)}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg flex items-center hover:bg-green-700 transition-colors"
             >
-              返回首頁
-            </Link>
+              <IoCloudDownload className="mr-1" /> 匯入/匯出
+            </button>
           </div>
         </div>
+        
+        {isLoading ? (
+          renderLoadingState()
+        ) : loadingError ? (
+          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded">
+            <p>{loadingError}</p>
+            <button 
+              onClick={fetchMistakes}
+              className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              重試
+            </button>
+          </div>
+        ) : mistakes.length === 0 ? (
+          renderEmptyState()
+        ) : (
+          <>
+            <div className="mb-6 bg-white rounded-lg shadow-md p-4">
+              <div className="flex flex-col md:flex-row md:items-center gap-4">
+                <div className="relative flex-grow">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <IoSearch className="text-gray-400" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="搜尋錯題..."
+                    className="pl-10 w-full border border-gray-300 rounded-lg py-2 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`px-4 py-2 rounded-lg flex items-center transition-colors ${
+                    showFilters ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
+                  }`}
+                >
+                  <IoFunnel className="mr-2" /> 過濾
+                  {selectedSubjects.length > 0 && (
+                    <span className="ml-2 bg-blue-600 text-white text-xs px-2 py-1 rounded-full">
+                      {selectedSubjects.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={exportToExcel}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg flex items-center hover:bg-purple-700 transition-colors"
+                >
+                  <IoCloudDownload className="mr-2" /> 匯出Excel
+                </button>
+              </div>
+              
+              {showFilters && (
+                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                  <h3 className="font-medium mb-2">按科目過濾</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {subjects.map((subject) => (
+                      <button
+                        key={subject}
+                        onClick={() => toggleSubjectFilter(subject)}
+                        className={`px-3 py-1 rounded-full text-sm ${
+                          selectedSubjects.includes(subject)
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-200 text-gray-800'
+                        }`}
+                      >
+                        {subject}
+                      </button>
+                    ))}
+                    {selectedSubjects.length > 0 && (
+                      <button
+                        onClick={() => setSelectedSubjects([])}
+                        className="px-3 py-1 rounded-full text-sm bg-red-100 text-red-800"
+                      >
+                        清除過濾
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <p className="text-sm text-gray-600 mb-4">
+              顯示 {filteredMistakes.length} / {allMistakesCount} 個錯題
+            </p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredMistakes.map((mistake) => (
+                <Link
+                  key={mistake.id}
+                  to={`/mistake/${mistake.id}`}
+                  className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
+                >
+                  <div className="p-5">
+                    <div className="flex justify-between items-start mb-3">
+                      <h3 className="font-medium text-lg text-gray-800 line-clamp-2">
+                        {mistake.title || '未命名錯題'}
+                      </h3>
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        {mistake.subject}
+                      </span>
+                    </div>
+                    
+                    {mistake.imageUrls?.[0] && (
+                      <div className="relative h-40 mb-3 bg-gray-100 rounded overflow-hidden">
+                        <img
+                          src={mistake.imageUrls[0]}
+                          alt="錯題圖片"
+                          className="w-full h-full object-contain"
+                          loading="lazy"
+                        />
+                      </div>
+                    )}
+                    
+                    <div className="text-sm text-gray-600 line-clamp-3 mb-3">
+                      {mistake.description || '沒有描述'}
+                    </div>
+                    
+                    <div className="flex justify-between items-center text-xs text-gray-500 mt-auto">
+                      <span>
+                        {formatDate(mistake.createdAt)}
+                      </span>
+                      {mistake.aiExplanation && (
+                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full">
+                          AI分析完成
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </>
+        )}
+        
+        {showCSVModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-xl overflow-hidden">
+              <div className="p-6">
+                <h2 className="text-lg font-bold mb-4">匯入/匯出錯題</h2>
+                <CSVImportExport 
+                  onImportSuccess={handleCSVImportSuccess} 
+                  onClose={() => setShowCSVModal(false)}
+                  onImportStart={handleCSVImportStart}
+                />
+                <div className="mt-4 flex justify-end">
+                  <button
+                    onClick={() => setShowCSVModal(false)}
+                    className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+                  >
+                    關閉
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {csvImportLoading && (
+          <div className="fixed inset-0 bg-black/50 flex flex-col items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-lg text-center">
+              <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4 mx-auto"></div>
+              <h3 className="text-lg font-semibold mb-2">匯入中...</h3>
+              <p className="text-gray-600">正在處理您的CSV檔案，請稍候...</p>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="flex flex-col md:flex-row justify-between items-center mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-4 md:mb-0">我的錯題簿</h1>
-        <div className="flex space-x-4">
-          <Link
-            to="/mistakes/csv"
-            className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition duration-200"
+    <div className="container mx-auto px-4 py-8 max-w-6xl">
+      {isExploding && <ConfettiExplosion duration={3000} particleCount={100} />}
+      
+      {importSuccess && (
+        <div className="fixed top-4 right-4 bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded shadow-md z-50">
+          <p className="font-bold">匯入成功！</p>
+          <p>您的錯題已成功匯入系統。</p>
+        </div>
+      )}
+      
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold text-gray-800">我的錯題集</h1>
+        <div className="flex space-x-2">
+          <button
+            onClick={() => navigate('/add-mistake')}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center hover:bg-blue-700 transition-colors"
           >
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-            </svg>
-            CSV 管理
-          </Link>
-          <Link
-            to="/mistakes/new"
-            className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition duration-200"
+            <IoAdd className="mr-1" /> 新增
+          </button>
+          <button
+            onClick={() => setShowCSVModal(true)}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg flex items-center hover:bg-green-700 transition-colors"
           >
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-            </svg>
-            添加錯題
-          </Link>
+            <IoCloudDownload className="mr-1" /> 匯入/匯出
+          </button>
         </div>
       </div>
-      <div className="bg-white shadow-lg rounded-lg overflow-hidden">
-        <div className="px-6 py-6 border-b border-gray-200">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 mb-2">
-                我的錯題本
-              </h2>
-              <p className="text-base text-gray-600">
-                共 {mistakes.length} 道錯題，不斷學習進步
-              </p>
-            </div>
-            <div className="mt-4 sm:mt-0 flex space-x-3">
-              <button
-                onClick={handleExportToExcel}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-              >
-                匯出到 Excel
-              </button>
-              <button
-                onClick={handleReload}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 text-base font-medium rounded-md shadow-sm text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-                disabled={isFetching}
-              >
-                {isFetching ? (
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                ) : null}
-                重新整理
-              </button>
-            </div>
-          </div>
+      
+      {isLoading ? (
+        renderLoadingState()
+      ) : loadingError ? (
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded">
+          <p>{loadingError}</p>
+          <button 
+            onClick={fetchMistakes}
+            className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            重試
+          </button>
         </div>
-        
-        <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-          <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
-            <div className="flex-grow">
-              <input
-                type="text"
-                placeholder="搜尋錯題..."
-                className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full text-base border-gray-300 rounded-md"
-                value={searchTerm}
-                onChange={handleSearchChange}
-              />
-            </div>
-            <div className="flex space-x-3">
-              <select
-                className="block pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md"
-                value={filterSubject}
-                onChange={handleSubjectFilterChange}
-              >
-                <option value="">所有科目</option>
-                {subjects.map((subject) => (
-                  <option key={subject} value={subject}>{subject}</option>
-                ))}
-              </select>
-              
-              <select
-                className="block pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md"
-                value={filterLevel}
-                onChange={handleLevelFilterChange}
-              >
-                <option value="">所有階段</option>
-                {Object.values(EducationLevel).map((level) => (
-                  <option key={level} value={level}>{level}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-        
-        <ul className="divide-y divide-gray-200">
-          {filteredMistakes.length > 0 ? (
-            filteredMistakes.map((mistake) => (
-              <li key={mistake.id} className="hover:bg-gray-50">
-                <Link
-                  to={`/mistakes/${mistake.id}`}
-                  className="block"
-                >
-                  <div className="px-6 py-5">
-                    <div className="flex flex-col md:flex-row md:justify-between md:items-center">
-                      <div className="flex-1 min-w-0 mb-2 md:mb-0 md:mr-4">
-                        <p className="text-xl font-semibold text-indigo-600 mb-1">
-                          {mistake.title}
-                        </p>
-                        <p className="text-base text-gray-700 line-clamp-2">
-                          {mistake.content}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-indigo-100 text-indigo-800">
-                          {mistake.subject}
-                        </span>
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
-                          {mistake.errorType}
-                        </span>
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                          {mistake.educationLevel}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <div className="mt-3 flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                      <div className="text-sm text-gray-500 mb-1 sm:mb-0">
-                        <span className="inline-block mr-2">
-                          📅 {formatDate(mistake.createdAt)}
-                        </span>
-                      </div>
-                      <div className="text-sm">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${mistake.explanation ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                          {mistake.explanation ? '已解釋' : '未解釋'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              </li>
-            ))
-          ) : (
-            <li className="px-6 py-12 text-center">
-              <div className="max-w-lg mx-auto">
-                <svg className="h-24 w-24 text-indigo-200 mx-auto mb-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                </svg>
-                
-                {mistakes.length === 0 ? (
-                  <>
-                    <h3 className="text-xl font-medium text-gray-900 mb-2">歡迎使用 Mathstakes！</h3>
-                    <p className="text-gray-600 mb-6">
-                      您的錯題本目前是空的。開始記錄您的第一個數學錯題，讓 AI 幫助您理解和改進！
-                    </p>
-                    <div className="space-y-4">
-                      <p className="text-sm text-gray-500 mb-2">您可以通過以下方式添加錯題：</p>
-                      <ul className="text-sm text-gray-600 text-left list-disc pl-5 mb-6 space-y-2">
-                        <li>拍照上傳數學題目，AI 自動識別內容</li>
-                        <li>手動輸入題目和錯誤詳情</li>
-                        <li>截圖或掃描錯題並上傳</li>
-                        <li>上傳 <span className="text-indigo-600 font-medium">CSV 文件</span> 批量導入錯題</li>
-                      </ul>
-                    </div>
-                    <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 justify-center">
-                      <Link 
-                        to="/mistakes/new" 
-                        className="inline-flex items-center px-5 py-2.5 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
-                      >
-                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        添加第一個錯題
-                      </Link>
-                      <Link 
-                        to="/mistakes/csv" 
-                        className="inline-flex items-center px-5 py-2.5 border border-gray-300 text-base font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
-                      >
-                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        上傳 CSV 文件
-                      </Link>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <h3 className="text-xl font-medium text-gray-900 mb-2">沒有符合條件的錯題</h3>
-                    <p className="text-gray-600 mb-6">
-                      嘗試調整搜尋或篩選條件，或添加新的錯題。
-                    </p>
-                  </>
-                )}
+      ) : mistakes.length === 0 ? (
+        renderEmptyState()
+      ) : (
+        <>
+          <div className="mb-6 bg-white rounded-lg shadow-md p-4">
+            <div className="flex flex-col md:flex-row md:items-center gap-4">
+              <div className="relative flex-grow">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <IoSearch className="text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="搜尋錯題..."
+                  className="pl-10 w-full border border-gray-300 rounded-lg py-2 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
               </div>
-            </li>
-          )}
-        </ul>
-      </div>
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`px-4 py-2 rounded-lg flex items-center transition-colors ${
+                  showFilters ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
+                }`}
+              >
+                <IoFunnel className="mr-2" /> 過濾
+                {selectedSubjects.length > 0 && (
+                  <span className="ml-2 bg-blue-600 text-white text-xs px-2 py-1 rounded-full">
+                    {selectedSubjects.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={exportToExcel}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg flex items-center hover:bg-purple-700 transition-colors"
+              >
+                <IoCloudDownload className="mr-2" /> 匯出Excel
+              </button>
+            </div>
+            
+            {showFilters && (
+              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                <h3 className="font-medium mb-2">按科目過濾</h3>
+                <div className="flex flex-wrap gap-2">
+                  {subjects.map((subject) => (
+                    <button
+                      key={subject}
+                      onClick={() => toggleSubjectFilter(subject)}
+                      className={`px-3 py-1 rounded-full text-sm ${
+                        selectedSubjects.includes(subject)
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 text-gray-800'
+                      }`}
+                    >
+                      {subject}
+                    </button>
+                  ))}
+                  {selectedSubjects.length > 0 && (
+                    <button
+                      onClick={() => setSelectedSubjects([])}
+                      className="px-3 py-1 rounded-full text-sm bg-red-100 text-red-800"
+                    >
+                      清除過濾
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <p className="text-sm text-gray-600 mb-4">
+            顯示 {filteredMistakes.length} / {allMistakesCount} 個錯題
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredMistakes.map((mistake) => (
+              <Link
+                key={mistake.id}
+                to={`/mistake/${mistake.id}`}
+                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
+              >
+                <div className="p-5">
+                  <div className="flex justify-between items-start mb-3">
+                    <h3 className="font-medium text-lg text-gray-800 line-clamp-2">
+                      {mistake.title || '未命名錯題'}
+                    </h3>
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      {mistake.subject}
+                    </span>
+                  </div>
+                  
+                  {mistake.imageUrls?.[0] && (
+                    <div className="relative h-40 mb-3 bg-gray-100 rounded overflow-hidden">
+                      <img
+                        src={mistake.imageUrls[0]}
+                        alt="錯題圖片"
+                        className="w-full h-full object-contain"
+                        loading="lazy"
+                      />
+                    </div>
+                  )}
+                  
+                  <div className="text-sm text-gray-600 line-clamp-3 mb-3">
+                    {mistake.description || '沒有描述'}
+                  </div>
+                  
+                  <div className="flex justify-between items-center text-xs text-gray-500 mt-auto">
+                    <span>
+                      {formatDate(mistake.createdAt)}
+                    </span>
+                    {mistake.aiExplanation && (
+                      <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full">
+                        AI分析完成
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+      
+      {showCSVModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-xl overflow-hidden">
+            <div className="p-6">
+              <h2 className="text-lg font-bold mb-4">匯入/匯出錯題</h2>
+              <CSVImportExport 
+                onImportSuccess={handleCSVImportSuccess} 
+                onClose={() => setShowCSVModal(false)}
+                onImportStart={handleCSVImportStart}
+              />
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => setShowCSVModal(false)}
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+                >
+                  關閉
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {csvImportLoading && (
+        <div className="fixed inset-0 bg-black/50 flex flex-col items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg text-center">
+            <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4 mx-auto"></div>
+            <h3 className="text-lg font-semibold mb-2">匯入中...</h3>
+            <p className="text-gray-600">正在處理您的CSV檔案，請稍候...</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { EducationLevel, TopicCategory, ErrorType } from '../types';
 import { generateMistakeInfoFromImage, generateAIExplanation } from '../utils/ai';
@@ -1005,47 +1005,59 @@ const MistakeFormFiveSteps: React.FC = () => {
             </p>
           )}
         </div>
-        
-        {/* 額外的LaTeX公式顯示區，僅當識別到公式時才顯示 */}
-        {explanation && explanation.includes('\\') && (
-          <div className="mt-2 p-4 border-t border-gray-200">
-            <h4 className="text-sm font-medium text-gray-900 mb-2">數學公式渲染</h4>
-            <p className="text-xs text-gray-600 mb-3">
-              以下是解釋中包含的數學公式的清晰顯示：
-            </p>
-            <div className="bg-gray-50 p-3 rounded-md">
-              <MathDisplay content={explanation} />
-            </div>
-          </div>
-        )}
       </div>
       
-      <div className="pt-5">
-        <div className="flex justify-between">
-          <div className="flex space-x-3">
+      {/* 編輯解釋區域 */}
+      {isEditing && (
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            編輯AI解釋
+          </label>
+          <textarea
+            value={customExplanation}
+            onChange={(e) => setCustomExplanation(e.target.value)}
+            rows={8}
+            className="block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-indigo-500 focus:border-indigo-500"
+          />
+          <div className="flex justify-end mt-2 space-x-2">
             <button
-              type="button"
-              onClick={goToPreviousStep}
-              className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              onClick={() => {
+                setIsEditing(false);
+                setCustomExplanation(explanation || '');
+              }}
+              className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
             >
-              上一步
+              取消
             </button>
-            <Link
-              to="/"
-              className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            <button
+              onClick={() => {
+                setExplanation(customExplanation);
+                setIsEditing(false);
+                setIsCustomExplanation(true);
+              }}
+              className="px-3 py-1 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700"
             >
-              返回首頁
-            </Link>
+              保存
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={generateCSV}
-            disabled={!explanation}
-            className="ml-3 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-          >
-            下載CSV並進入下一步
-          </button>
         </div>
+      )}
+      
+      <div className="flex justify-between pt-4">
+        <button
+          type="button"
+          onClick={goToPreviousStep}
+          className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        >
+          上一步
+        </button>
+        <button
+          type="button"
+          onClick={goToNextStep}
+          className="inline-flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        >
+          下一步
+        </button>
       </div>
     </div>
   );
