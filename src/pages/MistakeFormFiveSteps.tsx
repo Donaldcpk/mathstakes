@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { EducationLevel, TopicCategory, ErrorType } from '../types';
 import { generateMistakeInfoFromImage, generateAIExplanation } from '../utils/ai';
 import { saveNewMistake } from '../utils/storage';
 import { showToast } from '../utils/toast';
+import MathDisplay from '../components/MathDisplay';
 
 // 流程步驟枚舉
 enum FormStep {
@@ -564,7 +565,13 @@ const MistakeFormFiveSteps: React.FC = () => {
       )}
       
       <div className="pt-5">
-        <div className="flex justify-end">
+        <div className="flex justify-between">
+          <Link
+            to="/"
+            className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            返回首頁
+          </Link>
           <button
             type="button"
             onClick={goToNextStep}
@@ -760,13 +767,21 @@ const MistakeFormFiveSteps: React.FC = () => {
       
       <div className="pt-5">
         <div className="flex justify-between">
-          <button
-            type="button"
-            onClick={goToPreviousStep}
-            className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            上一步
-          </button>
+          <div className="flex space-x-3">
+            <button
+              type="button"
+              onClick={goToPreviousStep}
+              className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              上一步
+            </button>
+            <Link
+              to="/"
+              className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              返回首頁
+            </Link>
+          </div>
           <button
             type="button"
             onClick={goToNextStep}
@@ -925,13 +940,21 @@ const MistakeFormFiveSteps: React.FC = () => {
       
       <div className="pt-5">
         <div className="flex justify-between">
-          <button
-            type="button"
-            onClick={goToPreviousStep}
-            className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            上一步
-          </button>
+          <div className="flex space-x-3">
+            <button
+              type="button"
+              onClick={goToPreviousStep}
+              className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              上一步
+            </button>
+            <Link
+              to="/"
+              className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              返回首頁
+            </Link>
+          </div>
           {/* 注意：這一步只有在獲取AI解釋後才能進行下一步 */}
         </div>
       </div>
@@ -975,24 +998,45 @@ const MistakeFormFiveSteps: React.FC = () => {
         </div>
         <div className="p-4 prose max-w-none text-sm">
           {explanation ? (
-            explanation
+            <MathDisplay content={explanation} />
           ) : (
             <p className="text-gray-500 italic">
               AI 解釋尚未生成，請返回上一步生成解釋。
             </p>
           )}
         </div>
+        
+        {/* 額外的LaTeX公式顯示區，僅當識別到公式時才顯示 */}
+        {explanation && explanation.includes('\\') && (
+          <div className="mt-2 p-4 border-t border-gray-200">
+            <h4 className="text-sm font-medium text-gray-900 mb-2">數學公式渲染</h4>
+            <p className="text-xs text-gray-600 mb-3">
+              以下是解釋中包含的數學公式的清晰顯示：
+            </p>
+            <div className="bg-gray-50 p-3 rounded-md">
+              <MathDisplay content={explanation} />
+            </div>
+          </div>
+        )}
       </div>
       
       <div className="pt-5">
         <div className="flex justify-between">
-          <button
-            type="button"
-            onClick={goToPreviousStep}
-            className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            上一步
-          </button>
+          <div className="flex space-x-3">
+            <button
+              type="button"
+              onClick={goToPreviousStep}
+              className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              上一步
+            </button>
+            <Link
+              to="/"
+              className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              返回首頁
+            </Link>
+          </div>
           <button
             type="button"
             onClick={generateCSV}
@@ -1056,13 +1100,21 @@ const MistakeFormFiveSteps: React.FC = () => {
         </p>
         
         <div className="flex justify-between">
-          <button
-            type="button"
-            onClick={() => navigate('/mistakes')}
-            className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            不保存，回到錯題列表
-          </button>
+          <div className="flex space-x-3">
+            <button
+              type="button"
+              onClick={() => navigate('/mistakes')}
+              className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              不保存，回到錯題列表
+            </button>
+            <Link
+              to="/"
+              className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              返回首頁
+            </Link>
+          </div>
           <button
             type="button"
             onClick={saveMistakeRecord}
@@ -1118,10 +1170,16 @@ const MistakeFormFiveSteps: React.FC = () => {
             setExplanation('');
             setCsvData('');
           }}
-          className="ml-4 inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          className="mx-2 inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
         >
           添加另一個錯題
         </button>
+        <Link
+          to="/"
+          className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        >
+          返回首頁
+        </Link>
       </div>
     </div>
   );

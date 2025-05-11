@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Mistake, EducationLevel } from '../types';
 import { getMistake, deleteMistake as deleteFromStorage, addExplanation } from '../utils/storage';
 import { generateAIExplanation } from '../utils/ai';
+import MathDisplay from '../components/MathDisplay';
 
 // 格式化日期函數
 const formatDate = (dateString: string | Date): string => {
@@ -296,8 +297,19 @@ const MistakeDetail: React.FC = () => {
                   <div className="mt-6">
                     <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">AI分析與解釋</h3>
                     <div className="p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg shadow-inner whitespace-pre-line">
-                      {mistake.explanation}
+                      <MathDisplay content={mistake.explanation} />
                     </div>
+                    
+                    {/* 額外的LaTeX公式顯示區，僅當識別到公式時才顯示 */}
+                    {mistake.explanation.includes('\\') && (
+                      <div className="mt-4 p-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+                        <h4 className="text-md font-medium text-gray-900 dark:text-white mb-3">數學公式渲染</h4>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                          以下是解釋中包含的數學公式的漂亮顯示，更容易閱讀：
+                        </p>
+                        <MathDisplay content={mistake.explanation} />
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="mt-6">
