@@ -129,6 +129,47 @@ Mathstakes是一個幫助中學生從數學錯題中學習的Web應用程式。�
 - 本地和雲端數據存儲
 - 簡潔直觀的用戶界面
 
+## 🔑 離線模式和本地開發
+
+### 離線模式
+
+Mathstakes 應用支持離線模式開發和測試：
+
+1. **啟用離線模式**：
+   在 `src/utils/ai.ts` 文件中，將 `useLocalAISimulation` 設為 `true` 可以啟用本地模擬 AI 回應功能，無需實際 API 金鑰。
+   
+   ```javascript
+   // 使用本地模擬回應代替 API 請求
+   const useLocalAISimulation = true;
+   ```
+   
+2. **本地 AI 模擬**：
+   - 啟用離線模式後，圖片識別和解題解釋將使用本地預設模板
+   - 模擬回應仍然具有真實感，且無需網絡連接
+   - 適合快速開發和測試、課堂演示、或無網絡環境使用
+
+### 環境變數設置
+
+1. 創建一個 `.env.local` 文件，添加以下內容：
+
+   ```
+   # Firebase 配置
+   VITE_FIREBASE_API_KEY=AIzaSyBvSo54fPYT11tDeVkdC4mTgP2HqsgMb28
+   VITE_FIREBASE_AUTH_DOMAIN=mathstakes-app.firebaseapp.com
+   VITE_FIREBASE_PROJECT_ID=mathstakes-app
+   VITE_FIREBASE_STORAGE_BUCKET=mathstakes-app.firebasestorage.app
+   VITE_FIREBASE_MESSAGING_SENDER_ID=73353927746
+   VITE_FIREBASE_APP_ID=1:73353927746:web:44d2814fe3c0e81b2161db
+   VITE_FIREBASE_MEASUREMENT_ID=G-PFEBG1ZN30
+   
+   # OpenRouter API 金鑰 (如果需要實際 AI 功能)
+   VITE_OPENROUTER_API_KEY_1=你的第一個API金鑰
+   VITE_OPENROUTER_API_KEY_2=你的第二個API金鑰
+   VITE_OPENROUTER_API_KEY_3=你的第三個API金鑰
+   ```
+
+2. 如果你沒有 OpenRouter API 金鑰，保持離線模式啟用即可
+
 ## 🔑 API 設置
 
 為了充分利用 AI 功能，應用支持多 API 密鑰輪換機制：
@@ -147,44 +188,35 @@ Mathstakes是一個幫助中學生從數學錯題中學習的Web應用程式。�
 
 3. 可以只設置一到兩個密鑰，但建議設置全部三個以獲得最佳體驗
 
-## 🔧 本地開發
+## 📋 資料匯入/匯出功能
 
-1. 克隆倉庫
-   ```
-   git clone https://github.com/your-username/mathstakes.git
-   cd mathstakes
-   ```
+Mathstakes 提供完整的資料匯入和匯出功能，方便使用者備份和分享錯題資料：
 
-2. 安裝依賴
-   ```
-   npm install
-   ```
+1. **CSV 匯出**：
+   - 支持將所有錯題導出為標準 CSV 格式
+   - 自動處理特殊字符和格式
+   - 文件命名格式為 `mistakes_export_YYYYMMDD.csv`
 
-3. 設置環境變數
-   創建一個`.env.local`文件，添加以下內容：
-   ```
-   VITE_FIREBASE_API_KEY=your-firebase-api-key
-   VITE_FIREBASE_AUTH_DOMAIN=your-firebase-auth-domain
-   VITE_FIREBASE_PROJECT_ID=your-firebase-project-id
-   VITE_FIREBASE_STORAGE_BUCKET=your-firebase-storage-bucket
-   VITE_FIREBASE_MESSAGING_SENDER_ID=your-firebase-messaging-sender-id
-   VITE_FIREBASE_APP_ID=your-firebase-app-id
-   VITE_OPENROUTER_API_KEY=your-openrouter-api-key
-   ```
+2. **CSV 匯入**：
+   - 支持從標準 CSV 文件匯入錯題
+   - 自動處理舊版格式兼容性（例如 "description" 欄位自動映射為 "explanation"）
+   - 提供詳細的匯入錯誤報告
 
-4. 啟動開發伺服器
-   ```
-   npm run dev
-   ```
+3. **欄位格式**：
+   標準 CSV 文件包含以下欄位：
+   - title（標題）
+   - content（內容）
+   - subject（學科）
+   - educationLevel（教育階段）
+   - errorType（錯誤類型）
+   - explanation（解釋/描述）
+   - createdAt（創建時間）
+   - lastReviewedAt（最後復習時間）
 
-## 📋 未來規劃
-
-- 實現完整錯題複習計劃
-- 添加錯題分類和標籤系統
-- 增強資料分析和學習報告
-- 實現老師查看學生錯題功能
-- 優化離線支持
-- 開發移動應用版本
+4. **使用建議**：
+   - 定期匯出錯題作為備份
+   - 可以使用 Excel 或其他電子表格工具編輯 CSV 後再匯入
+   - 匯入時確保保留必要的欄位名稱
 
 ## 🌐 部署
 
@@ -288,3 +320,43 @@ Mathstakes 現已全面升級為 Progressive Web App (PWA)，提供接近原生�
 - 在 API 失敗時提供友好的錯誤信息
 - 實現超時處理，避免界面凍結
 - 支持在部分服務不可用時的降級處理
+
+## API金鑰管理系統
+
+應用程式整合了OpenRouter API，並實現了以下API金鑰管理功能：
+
+- **多金鑰輪換**：支援多個API金鑰，當一個金鑰遇到問題時自動切換
+- **錯誤處理**：自動識別並處理API請求中的各類錯誤，包括無效金鑰、請求達上限等
+- **智能重試**：實現指數退避算法的重試機制，避免頻繁請求
+- **金鑰效能監控**：追蹤API金鑰的使用情況和成功率
+
+## 環境變數設定
+
+應用程式使用以下環境變數：
+
+```
+NEXT_PUBLIC_OPENROUTER_API_KEY1=your_openrouter_api_key_1
+NEXT_PUBLIC_OPENROUTER_API_KEY2=your_openrouter_api_key_2
+NEXT_PUBLIC_OPENROUTER_MODEL=meta-llama/llama-4-maverick:free
+```
+
+## 系統需求
+
+- 支援現代瀏覽器（Chrome、Firefox、Safari、Edge等）
+- 支援網絡連接（離線模式僅支援基本功能）
+- 支援移動設備和桌面設備
+
+## 開發日誌
+
+### 2023-11-07
+- 完成API金鑰輪換功能
+- 優化網絡請求重試邏輯
+- 更新API錯誤處理機制
+- 移除本地模擬功能，改用真實OpenRouter API
+
+## 未來計劃
+
+- [ ] 實現用戶自訂API金鑰功能
+- [ ] 增強圖片識別功能
+- [ ] 優化AI回應解釋格式
+- [ ] 新增學習路徑推薦功能

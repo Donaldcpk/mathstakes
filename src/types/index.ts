@@ -10,8 +10,13 @@ export interface Mistake {
   errorType: ErrorType;
   errorSteps?: string;
   userAnswer?: string;
+  correctAnswer?: string;
   createdAt: string;
+  lastReviewedAt?: string;
+  reviewCount?: number;
   explanation?: string;
+  tags?: string[];
+  status?: string;
   updatedAt?: string;
 }
 

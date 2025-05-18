@@ -6,6 +6,7 @@
  */
 
 import localforage from 'localforage';
+import { LOCAL_STORAGE_KEYS } from '../constants';
 
 // 密鑰使用統計資料儲存
 const API_KEY_STATS_KEY = 'openrouter_api_key_stats';
@@ -25,13 +26,150 @@ interface ApiKeyStats {
   cooldowns: number[];     // 各密鑰冷卻截止時間戳
 }
 
-// 獲取所有可用的 API 密鑰
-const getAllApiKeys = (): string[] => {
-  return [
+// 存儲上次使用的 API 密鑰索引
+let lastKeyIndex = -1;
+
+// 存儲上次 API 失效標記
+const invalidKeys: Record<string, boolean> = {};
+
+// API金鑰配置
+export type ApiConfig = {
+  apiKey: string;
+};
+
+// 預設API金鑰
+const DEFAULT_API_KEYS = [
+  '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',
+  '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'
+];
+
+// 當前使用的金鑰索引
+let currentKeyIndex = 0;
+
+// 追蹤無效的API金鑰
+const invalidApiKeys: Set<string> = new Set();
+
+/**
+ * 重置所有 API 密鑰的有效性
+ */
+export const resetKeysValidity = (): void => {
+  Object.keys(invalidKeys).forEach(key => {
+    invalidKeys[key] = false;
+  });
+};
+
+/**
+ * 從環境變數獲取所有可用的 API 密鑰
+ * @returns API 密鑰數組
+ */
+export const getAllApiKeys = (): string[] => {
+  // 先嘗試從環境變數獲取密鑰
+  const envKeys = [
     import.meta.env.VITE_OPENROUTER_API_KEY_1,
     import.meta.env.VITE_OPENROUTER_API_KEY_2,
     import.meta.env.VITE_OPENROUTER_API_KEY_3
-  ].filter((key): key is string => typeof key === 'string' && key.length > 0); // 過濾掉未設置的密鑰
+  ].filter(Boolean); // 過濾掉未定義的密鑰
+  
+  // 如果有環境變數密鑰，返回它們
+  if (envKeys.length > 0) {
+    return envKeys;
+  }
+  
+  // 如果沒有環境變數密鑰，使用備用密鑰
+  // 注意：這些密鑰僅用於演示，實際使用時需要替換為真實的 API 密鑰
+  return DEFAULT_API_KEYS;
+};
+
+/**
+ * 獲取下一個可用的 API 密鑰
+ * @returns API 配置對象
+ */
+export const getNextApiKey = (): { useProxy: boolean; apiKey: string } => {
+  const apiKeys = getAllApiKeys();
+  
+  // 如果沒有可用的 API 密鑰，則返回默認配置
+  if (apiKeys.length === 0) {
+    console.warn('沒有找到 API 密鑰，請設置環境變數');
+    return {
+      useProxy: true,
+      apiKey: 'demo'
+    };
+  }
+  
+  // 嘗試找到一個可用的 API 密鑰
+  for (let i = 0; i < apiKeys.length; i++) {
+    // 計算下一個索引，實現循環選擇
+    lastKeyIndex = (lastKeyIndex + 1) % apiKeys.length;
+    const apiKey = apiKeys[lastKeyIndex];
+    
+    // 如果這個密鑰未被標記為失效，則使用它
+    if (!invalidKeys[apiKey]) {
+      console.log(`使用 API 密鑰 #${lastKeyIndex + 1}`);
+      return {
+        useProxy: false,
+        apiKey
+      };
+    }
+  }
+  
+  // 如果所有密鑰都被標記為失效，重置所有標記並使用第一個密鑰
+  console.warn('所有 API 密鑰都被標記為失效，重置狀態並重試第一個密鑰');
+  resetKeysValidity();
+  lastKeyIndex = 0;
+  
+  return {
+    useProxy: false,
+    apiKey: apiKeys[0]
+  };
+};
+
+/**
+ * 標記當前 API 密鑰為失效
+ * @param apiKey 要標記為失效的 API 密鑰
+ */
+export const markApiKeyAsInvalid = (apiKey: string): void => {
+  console.warn(`標記 API 密鑰為失效: ${apiKey.substring(0, 8)}...`);
+  invalidKeys[apiKey] = true;
+  
+  // 檢查是否所有密鑰都被標記為失效
+  const allKeys = getAllApiKeys();
+  const allInvalid = allKeys.every(key => invalidKeys[key]);
+  
+  if (allInvalid) {
+    console.error('所有 API 密鑰都被標記為失效，自動重置');
+    resetKeysValidity();
+  }
+};
+
+/**
+ * 獲取備用 API 配置（當所有 API 密鑰都失效時使用）
+ * @returns 備用 API 配置
+ */
+export const getFallbackApiConfig = () => {
+  return {
+    useProxy: true,
+    apiKey: 'demo'
+  };
+};
+
+// 導出的 API 配置獲取函數，供其他模塊使用
+export const getApiConfig = (): ApiConfig => {
+  // 檢查當前金鑰是否被標記為無效
+  while (invalidApiKeys.has(DEFAULT_API_KEYS[currentKeyIndex]) && currentKeyIndex < DEFAULT_API_KEYS.length) {
+    currentKeyIndex = (currentKeyIndex + 1) % DEFAULT_API_KEYS.length;
+  }
+  
+  // 如果所有金鑰都無效，重置無效金鑰列表並使用第一個金鑰
+  if (invalidApiKeys.size >= DEFAULT_API_KEYS.length) {
+    console.warn('所有API金鑰都已標記為無效，重置狀態並重試');
+    invalidApiKeys.clear();
+    currentKeyIndex = 0;
+  }
+  
+  // 返回當前可用的API金鑰
+  return {
+    apiKey: DEFAULT_API_KEYS[currentKeyIndex]
+  };
 };
 
 // 初始化或獲取 API 密鑰使用統計

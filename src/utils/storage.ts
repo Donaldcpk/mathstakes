@@ -2,10 +2,11 @@ import localforage from 'localforage';
 import { v4 as uuidv4 } from 'uuid';
 import { Mistake, ErrorType, EducationLevel, TopicCategory } from '../types';
 import { auth, getCurrentUser, saveUserMistake, getUserMistakes, updateUserMistake, deleteUserMistake } from './firebase';
-import { isOnline, waitForNetwork } from './networkRetry';
+import { isOnline } from './networkRetry';
 import { toast } from 'react-hot-toast';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
+import { markForSync as markItemForSync, syncOfflineChanges as syncOfflineChangesFromManager } from './syncManager';
 
 // 初始化 localforage
 localforage.config({
@@ -325,39 +326,83 @@ export const updateMistake = async (id: string, updates: Partial<Mistake>): Prom
 // 刪除錯題
 export const deleteMistake = async (id: string): Promise<boolean> => {
   try {
+    console.log(`開始刪除錯題 ID: ${id}`);
+    let localDeleteSuccess = false;
+    let cloudDeleteSuccess = false;
+    
+    // 先從本地存儲刪除
+    try {
+      const mistakes = await localforage.getItem<Mistake[]>(MISTAKES_KEY) || [];
+      const filteredMistakes = mistakes.filter(mistake => mistake.id !== id);
+      await localforage.setItem(MISTAKES_KEY, filteredMistakes);
+      
+      // 更新緩存
+      if (cachedMistakes) {
+        cachedMistakes = cachedMistakes.filter(mistake => mistake.id !== id);
+        lastCacheTime = Date.now();
+      }
+      
+      localDeleteSuccess = true;
+      console.log(`本地刪除錯題 ID: ${id} 成功`);
+    } catch (localError) {
+      console.error(`本地刪除錯題 ID: ${id} 失敗:`, localError);
+      // 即使本地刪除失敗，仍嘗試雲端刪除
+    }
+    
     // 如果用戶已登入，從Firebase刪除
     if (isUserLoggedIn()) {
-      const success = await deleteUserMistake(id);
-      if (success) {
-        // 更新緩存
-        if (cachedMistakes) {
-          cachedMistakes = cachedMistakes.filter(mistake => mistake.id !== id);
-          lastCacheTime = Date.now();
+      const userId = getUserId();
+      if (userId) {
+        try {
+          const success = await deleteUserMistake(id);
+          if (success) {
+            cloudDeleteSuccess = true;
+            console.log(`雲端刪除錯題 ID: ${id} 成功`);
+          } else {
+            console.warn(`雲端刪除錯題 ID: ${id} 失敗，可能是權限問題或者錯題不存在`);
+            // 錯題已從本地刪除但雲端刪除失敗，將其標記為待同步
+            await markForSync(`mistake_delete_${id}`);
+          }
+        } catch (cloudError) {
+          console.error(`雲端刪除錯題 ID: ${id} 發生錯誤:`, cloudError);
+          // 將刪除操作標記為待同步
+          await markForSync(`mistake_delete_${id}`);
         }
-        
-        // 更新本地存儲
-        const mistakes = await localforage.getItem<Mistake[]>(MISTAKES_KEY) || [];
-        const filteredMistakes = mistakes.filter(mistake => mistake.id !== id);
-        await localforage.setItem(MISTAKES_KEY, filteredMistakes);
-        return true;
       }
+    } else {
+      // 未登入時默認雲端刪除成功
+      cloudDeleteSuccess = true;
     }
     
-    // 否則從本地存儲刪除
-    const mistakes = await localforage.getItem<Mistake[]>(MISTAKES_KEY) || [];
-    const filteredMistakes = mistakes.filter(mistake => mistake.id !== id);
+    // 有一個成功就算成功
+    const isDeleteSuccessful = localDeleteSuccess || cloudDeleteSuccess;
     
-    await localforage.setItem(MISTAKES_KEY, filteredMistakes);
-    
-    // 更新緩存
-    if (cachedMistakes) {
-      cachedMistakes = cachedMistakes.filter(mistake => mistake.id !== id);
-      lastCacheTime = Date.now();
+    // 提供更詳細的日誌
+    if (localDeleteSuccess && cloudDeleteSuccess) {
+      console.log(`錯題 ID: ${id} 已完全刪除（本地和雲端）`);
+      toast.success('錯題已刪除');
+    } else if (localDeleteSuccess) {
+      console.log(`錯題 ID: ${id} 已從本地刪除，但雲端刪除失敗或未登入`);
+      toast.success('錯題已從本地刪除');
+      // 如果用戶已登入但雲端刪除失敗，顯示警告
+      if (isUserLoggedIn()) {
+        toast.error('雲端同步失敗，將在下次連線時重試');
+      }
+    } else if (cloudDeleteSuccess) {
+      console.log(`錯題 ID: ${id} 已從雲端刪除，但本地刪除失敗`);
+      toast.success('錯題已從雲端刪除');
+      toast.error('本地存儲可能有問題，請重新整理頁面');
+    } else {
+      console.error(`錯題 ID: ${id} 刪除完全失敗`);
+      toast.error('刪除失敗，請重試');
+      return false;
     }
     
-    return true;
+    return isDeleteSuccessful;
   } catch (error) {
     console.error(`無法刪除錯題 ID ${id}:`, error);
+    const errorMessage = error instanceof Error ? error.message : '未知錯誤';
+    toast.error(`刪除錯題失敗: ${errorMessage}`);
     return false;
   }
 };
@@ -444,74 +489,20 @@ export const initializeSampleData = async (): Promise<void> => {
   }
 };
 
-/**
- * 添加離線同步標記
- * @param key 同步對象的鍵
- */
+// 添加離線同步標記
+// 這個函數保留以向後兼容，但內部使用syncManager
 export async function markForSync(key: string): Promise<void> {
-  const syncQueue = await localforage.getItem<string[]>('sync_queue') || [];
-  if (!syncQueue.includes(key)) {
-    syncQueue.push(key);
-    await localforage.setItem('sync_queue', syncQueue);
-    console.log(`已將項目標記為待同步: ${key}`);
-  }
+  await markItemForSync(key);
 }
 
 /**
  * 同步離線變更到雲端
  * 在恢復網絡連接後調用
+ * @deprecated 請使用 syncManager.syncOfflineChanges
  */
 export async function syncOfflineChanges(): Promise<void> {
-  if (!isOnline()) {
-    console.log('離線狀態，無法同步');
-    return;
-  }
-
-  const syncQueue = await localforage.getItem<string[]>('sync_queue') || [];
-  if (syncQueue.length === 0) {
-    console.log('沒有待同步的項目');
-    return;
-  }
-
-  const user = getCurrentUser();
-  if (!user) {
-    console.log('用戶未登入，無法同步到雲端');
-    return;
-  }
-
-  console.log(`開始同步 ${syncQueue.length} 個離線變更`);
-  toast.loading(`正在同步資料...`, { id: 'sync-toast' });
-
-  const failedItems: string[] = [];
-  
-  for (const key of syncQueue) {
-    try {
-      // 處理不同類型的同步
-      if (key.startsWith('mistake_')) {
-        const mistakeId = key.replace('mistake_', '');
-        const mistake = await getMistake(mistakeId);
-        
-        if (mistake) {
-          await saveMistakeToCloud(mistake);
-          console.log(`成功同步錯題: ${mistakeId}`);
-        }
-      }
-      // 可以添加其他類型的同步處理
-      
-    } catch (error) {
-      console.error(`同步項目失敗: ${key}`, error);
-      failedItems.push(key);
-    }
-  }
-
-  // 更新同步隊列，只保留失敗的項目
-  if (failedItems.length > 0) {
-    await localforage.setItem('sync_queue', failedItems);
-    toast.error(`同步完成，但有 ${failedItems.length} 個項目失敗`, { id: 'sync-toast' });
-  } else {
-    await localforage.setItem('sync_queue', []);
-    toast.success('所有資料同步完成', { id: 'sync-toast' });
-  }
+  // 使用syncManager中的實現
+  await syncOfflineChangesFromManager();
 }
 
 /**
@@ -573,11 +564,153 @@ async function saveMistakeToCloud(mistake: Mistake): Promise<void> {
   });
 }
 
-// 監聽網絡狀態變化，自動同步
-if (typeof window !== 'undefined') {
-  window.addEventListener('online', async () => {
-    console.log('網絡連接已恢復，開始同步資料');
-    // 延遲一下確保連接穩定
-    setTimeout(syncOfflineChanges, 3000);
-  });
-} 
+// 獲取錯題數量
+export const getMistakesCount = (): number => {
+  return getMistakes().length;
+};
+
+// 根據 ID 獲取特定錯題
+export const getMistakeById = (id: string): Mistake | undefined => {
+  const mistakes = getMistakes();
+  return mistakes.find(mistake => mistake.id === id);
+};
+
+/**
+ * 批量保存錯題（用於CSV導入）
+ * @param mistakes 要保存的錯題數組
+ * @returns 返回成功導入的錯題數量和錯誤信息
+ */
+export const bulkSaveMistakes = async (
+  mistakes: Partial<Mistake>[]
+): Promise<{success: boolean; importedCount: number; errors: string[]}> => {
+  if (!mistakes || mistakes.length === 0) {
+    return { success: false, importedCount: 0, errors: ['沒有可匯入的錯題'] };
+  }
+  
+  const errors: string[] = [];
+  let importedCount = 0;
+  const savedIds: string[] = [];
+  
+  try {
+    console.log(`準備批量匯入 ${mistakes.length} 個錯題`);
+    
+    // 獲取現有的錯題
+    const existingMistakes = await localforage.getItem<Mistake[]>(MISTAKES_KEY) || [];
+    const updatedMistakes: Mistake[] = [...existingMistakes];
+
+    // 處理每一個錯題
+    for (let i = 0; i < mistakes.length; i++) {
+      const item = mistakes[i];
+      
+      try {
+        // 驗證必填欄位
+        if (!item.title || !item.content || !item.subject) {
+          errors.push(`第 ${i+1} 項缺少必要欄位 (title, content, subject 為必填)`);
+          continue;
+        }
+
+        // 建立完整的錯題物件
+        const newMistake: Mistake = {
+          id: item.id || uuidv4(),
+          title: item.title,
+          content: item.content,
+          subject: item.subject,
+          educationLevel: item.educationLevel || EducationLevel.JUNIOR,
+          errorType: item.errorType || ErrorType.UNKNOWN,
+          explanation: item.explanation || '',
+          errorSteps: item.errorSteps || '',
+          userAnswer: item.userAnswer || '',
+          correctAnswer: item.correctAnswer || '',
+          createdAt: item.createdAt || new Date().toISOString(),
+          lastReviewedAt: item.lastReviewedAt || '',
+          reviewCount: item.reviewCount || 0,
+          tags: item.tags || [],
+          imageUrl: item.imageUrl || '',
+          status: item.status || 'active',
+          topicCategory: item.topicCategory || TopicCategory.NUMBER_ALGEBRA
+        };
+
+        // 檢查是否有重複ID
+        const existingIndex = updatedMistakes.findIndex(m => m.id === newMistake.id);
+        if (existingIndex !== -1) {
+          // 更新現有錯題
+          updatedMistakes[existingIndex] = {
+            ...updatedMistakes[existingIndex],
+            ...newMistake
+          };
+          console.log(`更新現有錯題: ${newMistake.id}`);
+        } else {
+          // 添加新錯題
+          updatedMistakes.push(newMistake);
+          console.log(`添加新錯題: ${newMistake.id}`);
+        }
+
+        savedIds.push(newMistake.id);
+        importedCount++;
+        
+      } catch (itemError) {
+        console.error('處理錯題項目時出錯:', itemError);
+        errors.push(`第 ${i+1} 項處理失敗: ${(itemError as Error).message}`);
+      }
+    }
+
+    // 批量保存到本地存儲
+    if (importedCount > 0) {
+      console.log(`保存 ${importedCount} 個錯題到本地存儲`);
+      await localforage.setItem(MISTAKES_KEY, updatedMistakes);
+      
+      // 更新緩存
+      cachedMistakes = updatedMistakes;
+      lastCacheTime = Date.now();
+      
+      // 如果用戶已登入，將新錯題同步到雲端
+      if (isUserLoggedIn() && isOnline()) {
+        const userId = getUserId();
+        if (userId) {
+          console.log('正在同步匯入的錯題到雲端...');
+          try {
+            // 獲取所有已匯入的錯題
+            const importedMistakes = updatedMistakes.filter(m => savedIds.includes(m.id));
+            
+            // 在Firebase中批量保存
+            for (const mistake of importedMistakes) {
+              await setDoc(doc(db, `users/${userId}/mistakes/${mistake.id}`), mistake);
+            }
+            console.log('匯入的錯題已同步到雲端');
+          } catch (syncError) {
+            console.error('同步到雲端失敗:', syncError);
+            errors.push(`同步到雲端失敗: ${(syncError as Error).message}，但錯題已保存在本地`);
+            // 將未同步的項目標記為需要同步
+            for (const id of savedIds) {
+              await markForSync(`mistake:${id}`);
+            }
+          }
+        }
+      } else if (isUserLoggedIn()) {
+        // 標記為離線，稍後同步
+        console.log('離線狀態，標記錯題為待同步');
+        for (const id of savedIds) {
+          await markForSync(`mistake:${id}`);
+        }
+      }
+      
+      // 觸發更新事件
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mistakesUpdated', { 
+          detail: { mistakes: updatedMistakes } 
+        }));
+      }
+      
+      return { success: true, importedCount, errors };
+    } else {
+      return { success: false, importedCount: 0, errors: [...errors, '批量導入失敗: 沒有符合要求的錯題'] };
+    }
+  } catch (error) {
+    console.error('批量保存錯題出錯:', error);
+    return { 
+      success: false, 
+      importedCount, 
+      errors: [...errors, `批量導入失敗: ${(error as Error).message}`] 
+    };
+  }
+}; 

@@ -962,105 +962,174 @@ const MistakeFormFiveSteps: React.FC = () => {
   );
 
   // 渲染第四步：AI解釋
-  const renderAIExplanationStep = () => (
-    <div className="space-y-6">
-      <h3 className="text-lg font-medium text-gray-900">步驟 4：AI 解釋</h3>
+  const renderAIExplanationStep = () => {
+    // 初始化 isEditing 變數，解決未定義錯誤
+    const isEditing = false;
+    
+    // 格式化 AI 解釋，分三段顯示
+    const formatAIExplanation = (text: string) => {
+      if (!text) return '';
       
-      {/* 顯示題目和內容的區塊 */}
-      <div className="bg-gray-50 p-4 rounded-md mb-4">
-        <h4 className="text-md font-medium text-gray-900 mb-2">錯題資訊</h4>
-        <div className="flex flex-wrap gap-2 mb-3">
-          {subject && (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-              {subject}
-            </span>
-          )}
-          {educationLevel && (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-              {educationLevel === 'JUNIOR_HIGH' ? '初中' : '高中'}
-            </span>
-          )}
-          {topic && (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-              {topic}
-            </span>
-          )}
-        </div>
-        <div className="text-gray-900">
-          <p className="font-bold">題目：{title}</p>
-          <p className="mt-2 whitespace-pre-wrap">{content}</p>
-        </div>
-      </div>
+      // 尋找問題 1, 2, 3 的答案，並分段顯示
+      const parts = text.split(/(\d+\.\s+)/g);
+      let formattedText = '';
+      let questionCount = 0;
       
-      <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
-        <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-          <h3 className="text-md font-medium text-gray-900">AI 分析結果</h3>
+      for (let i = 0; i < parts.length; i++) {
+        if (parts[i].match(/\d+\.\s+/)) {
+          // 這是問題編號
+          if (questionCount > 0) {
+            // 在每個問題之間添加空行
+            formattedText += '\n\n';
+          }
+          formattedText += parts[i];
+          questionCount++;
+          
+          // 添加問題內容
+          if (i + 1 < parts.length) {
+            formattedText += parts[i + 1];
+            i++;  // 跳過已處理的內容
+          }
+        } else if (i === 0 && parts[i].trim()) {
+          // 處理開頭的文字（如果有）
+          formattedText += parts[i];
+        }
+      }
+      
+      return formattedText;
+    };
+    
+    return (
+      <div className="step-container">
+        <h2 className="step-title">第四步：AI 解釋與建議</h2>
+        
+        {/* 這個分區顯示錯題內容的摘要 */}
+        <div className="mb-4 p-3 bg-gray-50 rounded-md">
+          <h3 className="font-semibold text-lg mb-2">錯題內容摘要：</h3>
+          <p className="text-gray-700">{content}</p>
         </div>
-        <div className="p-4 prose max-w-none text-sm">
-          {explanation ? (
-            <MathDisplay content={explanation} />
+        
+        {/* AI 分析請求區域 */}
+        <div className="mb-6">
+          <h3 className="font-semibold text-lg mb-3">請告訴 AI 您想了解哪些方面：</h3>
+          <p className="text-sm text-gray-500 mb-3">您可以修改下方問題內容，或保留預設問題</p>
+          
+          <div className="grid grid-cols-1 gap-4 mb-4">
+            <div>
+              <label className="block mb-1 text-gray-700">
+                問題 1：這種題目的正確答案是什麼？如何一步步解題？
+              </label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border rounded-md"
+                placeholder="您可以輸入更具體的問題..."
+                value={question1}
+                onChange={(e) => setQuestion1(e.target.value)}
+              />
+            </div>
+            
+            <div>
+              <label className="block mb-1 text-gray-700">
+                問題 2：學生常犯哪些錯誤？為什麼會犯這些錯誤？
+              </label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border rounded-md"
+                placeholder="您可以輸入更具體的問題..."
+                value={question2}
+                onChange={(e) => setQuestion2(e.target.value)}
+              />
+            </div>
+            
+            <div>
+              <label className="block mb-1 text-gray-700">
+                問題 3：如何避免面對這種題目犯錯？有什麼學習建議？
+              </label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border rounded-md"
+                placeholder="您可以輸入更具體的問題..."
+                value={question3}
+                onChange={(e) => setQuestion3(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+        
+        {/* AI 解釋顯示區域 */}
+        <div className="mb-6">
+          <h3 className="font-semibold text-lg mb-2">AI 解釋：</h3>
+          
+          {!explanation ? (
+            <div className="flex justify-center items-center bg-gray-50 p-8 rounded-md text-center">
+              <div>
+                <p className="text-gray-500 mb-4">目前尚未生成 AI 解釋</p>
+                <button
+                  type="button"
+                  className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  onClick={getAIExplanation}
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? (
+                    <span className="flex items-center">
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      正在生成...
+                    </span>
+                  ) : (
+                    '生成 AI 解釋'
+                  )}
+                </button>
+              </div>
+            </div>
           ) : (
-            <p className="text-gray-500 italic">
-              AI 解釋尚未生成，請返回上一步生成解釋。
-            </p>
+            <div className="bg-white border border-gray-200 rounded-md p-4 prose max-w-none">
+              <MathDisplay content={formatAIExplanation(explanation)} isBlock={false} />
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-gray-300"
+                  onClick={getAIExplanation}
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? '重新生成中...' : '重新生成解釋'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {processingError && (
+            <div className="mt-3 text-red-500">
+              生成解釋時出錯：{processingError}
+            </div>
           )}
         </div>
-      </div>
-      
-      {/* 編輯解釋區域 */}
-      {isEditing && (
-        <div className="mt-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            編輯AI解釋
-          </label>
-          <textarea
-            value={customExplanation}
-            onChange={(e) => setCustomExplanation(e.target.value)}
-            rows={8}
-            className="block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-indigo-500 focus:border-indigo-500"
-          />
-          <div className="flex justify-end mt-2 space-x-2">
+        
+        {/* 替換 StepNavigation 為直接的按鈕導航 */}
+        <div className="pt-5">
+          <div className="flex justify-between">
             <button
-              onClick={() => {
-                setIsEditing(false);
-                setCustomExplanation(explanation || '');
-              }}
-              className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
+              type="button"
+              onClick={goToPreviousStep}
+              className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
             >
-              取消
+              上一步
             </button>
             <button
-              onClick={() => {
-                setExplanation(customExplanation);
-                setIsEditing(false);
-                setIsCustomExplanation(true);
-              }}
-              className="px-3 py-1 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700"
+              type="button"
+              onClick={goToNextStep}
+              disabled={!explanation}
+              className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
             >
-              保存
+              下一步
             </button>
           </div>
         </div>
-      )}
-      
-      <div className="flex justify-between pt-4">
-        <button
-          type="button"
-          onClick={goToPreviousStep}
-          className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-        >
-          上一步
-        </button>
-        <button
-          type="button"
-          onClick={goToNextStep}
-          className="inline-flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-        >
-          下一步
-        </button>
       </div>
-    </div>
-  );
+    );
+  };
 
   // 渲染第五步：總結和CSV
   const renderSummaryStep = () => (

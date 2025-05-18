@@ -1,0 +1,66 @@
+:root {
+  /* 調整全局色彩方案 */
+  --primary-color: #4361ee;
+  --secondary-color: #3f37c9;
+  --accent-color: #4895ef;
+  --text-color: #333333;
+  --background-color: #ffffff;
+  --lighter-background: #f8f9fa;
+  --border-color: #dee2e6;
+  --error-color: #e63946;
+  --success-color: #2a9d8f;
+  --warning-color: #ff9f1c;
+  --disabled-color: #ced4da;
+  --shadow-color: rgba(0, 0, 0, 0.1);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--background-color);
+  color: var(--text-color);
+}
+
+/* 調整卡片和容器背景顏色 */
+.card, .container, .form-container {
+  background-color: var(--background-color);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+/* 確保表單元素有足夠的對比度 */
+input, textarea, select {
+  background-color: var(--background-color);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+
+/* 確保文本有足夠的對比度 */
+h1, h2, h3, h4, h5, h6, p, label {
+  color: var(--text-color);
+}
+
+/* 調整按鈕樣式 */
+button, .btn {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+button:hover, .btn:hover {
+  background-color: var(--secondary-color);
+}
+
+button:disabled, .btn:disabled {
+  background-color: var(--disabled-color);
+  cursor: not-allowed;
+} 

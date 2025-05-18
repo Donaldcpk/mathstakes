@@ -1,99 +1,103 @@
 /**
- * 網絡請求自動重試工具
- * 
- * 此模組提供了處理網絡錯誤和自動重試機制的功能。
- * 使用指數退避算法增加重試間隔，避免網絡擁堵。
+ * 網絡重試工具
+ * 提供網絡請求的重試機制及網絡狀態檢測
  */
 
-import toast from 'react-hot-toast';
-
-interface RetryOptions {
-  /** 最大重試次數 */
-  maxRetries?: number;
-  /** 初始重試延遲（毫秒） */
-  initialDelay?: number;
-  /** 延遲乘數因子 */
-  delayFactor?: number;
-  /** 是否顯示重試提示 */
-  showToast?: boolean;
-  /** 超時時間（毫秒） */
-  timeout?: number;
-  /** 重試前回調函數 */
-  onRetry?: (attempt: number, error: any) => void;
+/**
+ * 重試配置接口
+ */
+interface RetryConfig {
+  maxRetries: number;
+  retryDelay: number;
 }
 
 /**
- * 使用自動重試機制包裝異步函數
- * @param fn 要執行的異步函數
- * @param options 重試配置選項
- * @returns 包裝後的異步函數
+ * 默認重試配置
+ */
+const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxRetries: 3,
+  retryDelay: 1000
+};
+
+/**
+ * 檢查網絡是否連接
+ * @returns 是否在線
+ */
+export const isOnline = (): boolean => {
+  return typeof navigator !== 'undefined' && navigator.onLine === true;
+};
+
+/**
+ * 等待指定時間
+ * @param ms 等待時間（毫秒）
+ * @returns Promise
+ */
+const wait = (ms: number): Promise<void> => {
+  return new Promise(resolve => setTimeout(resolve, ms));
+};
+
+/**
+ * 帶重試機制的網絡請求
+ * 
+ * @param fn 執行的網絡請求函數
+ * @param config 重試配置
+ * @returns Promise<T> 請求結果
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  options: RetryOptions = {}
+  config: Partial<RetryConfig> = {}
 ): Promise<T> {
-  const {
-    maxRetries = 3,
-    initialDelay = 1000,
-    delayFactor = 1.5,
-    showToast = true,
-    timeout = 15000,
-    onRetry = () => {}
-  } = options;
-
-  let attempts = 0;
-  let lastError: any;
-
-  // 建立超時控制
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => {
-      reject(new Error(`操作超時（${timeout}毫秒）`));
-    }, timeout);
-  });
-
-  while (attempts <= maxRetries) {
-    try {
-      // 使用 Promise.race 實現超時控制
-      return await Promise.race([fn(), timeoutPromise]);
-    } catch (error) {
-      attempts++;
-      lastError = error;
-
-      // 已達到最大重試次數，拋出最後一個錯誤
-      if (attempts > maxRetries) {
-        throw error;
-      }
-
-      const delay = initialDelay * Math.pow(delayFactor, attempts - 1);
-      
-      // 調用重試回調函數
-      onRetry(attempts, error);
-      
-      // 顯示重試提示
-      if (showToast) {
-        toast.error(`網絡請求失敗，${delay / 1000}秒後重試 (${attempts}/${maxRetries})`, {
-          duration: delay,
-          id: 'network-retry'
-        });
-      }
-
-      // 等待延遲後重試
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
+  // 合併配置
+  const retryConfig: RetryConfig = {
+    ...DEFAULT_RETRY_CONFIG,
+    ...config
+  };
+  
+  let lastError: Error | null = null;
+  let retryCount = 0;
+  
+  // 檢查網絡狀態
+  if (!isOnline()) {
+    throw new Error('網絡離線，無法進行操作');
   }
 
-  // 不應該達到這裡，但為了類型安全
-  throw lastError;
-}
-
-/**
- * 檢測網絡連接狀態
- * @returns 網絡是否連接
- */
-export function isOnline(): boolean {
-  return typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean'
-    ? navigator.onLine
-    : true;
+  // 嘗試執行，失敗時重試
+  while (retryCount <= retryConfig.maxRetries) {
+    try {
+      // 如果不是第一次嘗試，等待指定時間
+      if (retryCount > 0) {
+        // 使用指數退避策略，每次重試延遲時間加倍
+        const delay = retryConfig.retryDelay * Math.pow(2, retryCount - 1);
+        console.log(`重試 (${retryCount}/${retryConfig.maxRetries}) 等待 ${delay}ms...`);
+        await wait(delay);
+      }
+      
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.warn(`嘗試 ${retryCount + 1}/${retryConfig.maxRetries + 1} 失敗:`, lastError.message);
+      
+      // 如果是無效的API密鑰或授權問題，立即停止重試
+      if (error instanceof Error && 
+          (error.message.includes('無效的API金鑰') || 
+           error.message.includes('401') || 
+           error.message.includes('403'))) {
+        console.error('授權錯誤，停止重試');
+        break;
+      }
+      
+      retryCount++;
+    }
+  }
+  
+  // 如果所有重試都失敗，拋出最後一個錯誤
+  if (lastError) {
+    console.error('所有重試嘗試都失敗:', lastError);
+    throw lastError;
+  }
+  
+  // 不應該到達這裏，但為了類型安全
+  throw new Error('未知錯誤');
 }
 
 /**

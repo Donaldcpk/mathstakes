@@ -1,78 +1,40 @@
-import React from 'react';
-import 'katex/dist/katex.min.css';
-import { InlineMath, BlockMath } from 'react-katex';
+import React, { useEffect, useRef } from 'react';
+import { renderMathContent } from '../utils/formulaFormatter';
 
 interface MathDisplayProps {
-  content: string;
-  isBlock?: boolean;
+  math: string;
+  className?: string;
 }
 
 /**
- * 將文本中的 LaTeX 表達式識別並渲染為數學公式
- * LaTeX 表達式格式：
- * 行內公式：$...$
- * 區塊公式：$$...$$
+ * 數學公式顯示組件
+ * 能夠渲染包含LaTeX數學公式的文本
  */
-const MathDisplay: React.FC<MathDisplayProps> = ({ content, isBlock = false }) => {
-  if (!content) return null;
-
-  try {
-    // 檢查是否整個內容就是一個 LaTeX 公式
-    if (isBlock) {
-      return <BlockMath math={content} />;
-    }
-
-    // 處理混合內容（文本 + 行內公式）
-    // 正則表達式匹配 $...$ 格式的行內公式
-    const parts = content.split(/(\$[^$]+\$)/g);
+const MathDisplay: React.FC<MathDisplayProps> = ({ math, className = '' }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  // 使用KaTeX渲染數學公式
+  useEffect(() => {
+    if (!math || !containerRef.current) return;
     
-    return (
-      <>
-        {parts.map((part, index) => {
-          // 檢查是否是 LaTeX 公式 ($...$)
-          if (part.startsWith('$') && part.endsWith('$') && part.length > 2) {
-            try {
-              // 移除 $ 符號並渲染公式
-              const formula = part.slice(1, -1);
-              return <InlineMath key={index} math={formula} />;
-            } catch (error) {
-              console.error('LaTeX 渲染錯誤:', error);
-              return <span key={index} className="text-red-500">{part}</span>;
-            }
-          }
-          
-          // 檢查是否包含 $$...$$ 格式的區塊公式
-          if (part.includes('$$')) {
-            const blockParts = part.split(/(\$\$[^$]+\$\$)/g);
-            return (
-              <React.Fragment key={index}>
-                {blockParts.map((blockPart, blockIndex) => {
-                  if (blockPart.startsWith('$$') && blockPart.endsWith('$$') && blockPart.length > 4) {
-                    try {
-                      // 移除 $$ 符號並渲染區塊公式
-                      const formula = blockPart.slice(2, -2);
-                      return <BlockMath key={`${index}-${blockIndex}`} math={formula} />;
-                    } catch (error) {
-                      console.error('LaTeX 區塊渲染錯誤:', error);
-                      return <span key={`${index}-${blockIndex}`} className="text-red-500">{blockPart}</span>;
-                    }
-                  }
-                  // 純文本
-                  return blockPart ? <span key={`${index}-${blockIndex}`}>{blockPart}</span> : null;
-                })}
-              </React.Fragment>
-            );
-          }
-          
-          // 純文本
-          return part ? <span key={index}>{part}</span> : null;
-        })}
-      </>
-    );
-  } catch (error) {
-    console.error('MathDisplay 渲染錯誤:', error);
-    return <span className="text-red-500">無法渲染內容: {content}</span>;
-  }
+    // 使用MathJax渲染 (如果可用)
+    if (window.MathJax && window.MathJax.typeset) {
+      window.MathJax.typeset([containerRef.current]);
+    }
+  }, [math]);
+  
+  if (!math) return null;
+  
+  // 使用formulaFormatter處理數學公式
+  const renderedContent = renderMathContent(math);
+  
+  return (
+    <div 
+      ref={containerRef}
+      className={className}
+      dangerouslySetInnerHTML={{ __html: renderedContent }} 
+    />
+  );
 };
 
 export default MathDisplay; 

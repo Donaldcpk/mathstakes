@@ -1,9 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { parseCSV, validateCSVFormat, importMistakesFromCSV } from '../utils/csvHandler';
+import { parseCSVData, importMistakesFromCSV } from '../utils/csvHandler';
 import { exportToCSV } from '../utils/csvExport';
 import { Link } from 'react-router-dom';
 import { getMistakes } from '../utils/storage';
 import { IoArrowBack, IoDownload, IoCloudUpload } from 'react-icons/io5';
+import { toast } from 'react-hot-toast';
 
 interface CSVImportExportProps {
   onImportSuccess?: () => void;
@@ -20,6 +21,7 @@ const CSVImportExport: React.FC<CSVImportExportProps> = ({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -27,29 +29,7 @@ const CSVImportExport: React.FC<CSVImportExportProps> = ({
       const selectedFile = e.target.files[0];
       setFile(selectedFile);
       setValidationError(null);
-    }
-  };
-
-  const validateFile = async () => {
-    if (!file) {
-      setValidationError('請先選擇CSV文件');
-      return false;
-    }
-
-    try {
-      const content = await readFileAsText(file);
-      const { isValid, error } = validateCSVFormat(content);
-      
-      if (!isValid) {
-        setValidationError(error || '無效的CSV格式');
-        return false;
-      }
-      
-      setValidationError(null);
-      return true;
-    } catch (err) {
-      setValidationError('讀取文件時發生錯誤');
-      return false;
+      setImportErrors([]);
     }
   };
 
@@ -69,37 +49,69 @@ const CSVImportExport: React.FC<CSVImportExportProps> = ({
   };
 
   const handleImport = async () => {
-    if (!await validateFile()) return;
+    if (!file) {
+      setValidationError('請先選擇CSV文件');
+      return;
+    }
     
     if (onImportStart) {
       onImportStart();
     }
     
     setIsImporting(true);
-    setImportProgress(0);
+    setImportProgress(10);
+    setImportErrors([]);
+    setValidationError(null);
     
     try {
-      const content = await readFileAsText(file!);
-      const { data } = parseCSV(content);
+      console.log('開始讀取CSV文件:', file.name);
+      const content = await readFileAsText(file);
+      setImportProgress(30);
       
-      // 模擬進度
-      const updateProgress = (progress: number) => {
-        setImportProgress(progress);
-      };
+      // 記錄CSV內容的前100個字符（用於調試）
+      const previewContent = content.substring(0, 100) + (content.length > 100 ? '...' : '');
+      console.log('CSV內容預覽:', previewContent);
       
-      await importMistakesFromCSV(data, updateProgress);
+      // 使用新的 importMistakesFromCSV API
+      console.log('開始解析和匯入CSV數據');
+      setImportProgress(50);
+      const result = await importMistakesFromCSV(content);
       
-      if (onImportSuccess) {
-        onImportSuccess();
+      setImportProgress(90);
+      
+      if (result.errors.length > 0) {
+        console.warn('匯入完成但有警告:', result.errors);
+        setImportErrors(result.errors);
       }
       
-      setFile(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+      if (result.success && result.importedCount > 0) {
+        console.log(`成功匯入 ${result.importedCount} 條錯題記錄`);
+        toast.success(`成功匯入 ${result.importedCount} 條錯題記錄`);
+        
+        if (onImportSuccess) {
+          onImportSuccess();
+        }
+        
+        setFile(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      } else if (result.importedCount === 0) {
+        // 沒有成功匯入任何記錄
+        setValidationError('匯入失敗，未能匯入任何錯題記錄');
+        console.error('匯入失敗：未能匯入任何記錄');
+        toast.error('匯入失敗，未能匯入任何錯題');
+      } else {
+        setValidationError('匯入失敗，請檢查錯誤訊息');
+        console.error('匯入失敗，但處理過程已完成');
+        toast.error('匯入失敗，請查看詳細錯誤');
       }
+      
+      setImportProgress(100);
     } catch (error) {
       console.error('匯入CSV錯誤:', error);
-      setValidationError('匯入過程中發生錯誤');
+      setValidationError(`匯入過程中發生錯誤: ${error instanceof Error ? error.message : '未知錯誤'}`);
+      toast.error('匯入過程中發生錯誤');
     } finally {
       setIsImporting(false);
     }
@@ -166,6 +178,17 @@ const CSVImportExport: React.FC<CSVImportExportProps> = ({
               </div>
             )}
             
+            {importErrors.length > 0 && (
+              <div className="text-sm text-orange-700 bg-orange-100 p-2 rounded max-h-32 overflow-y-auto">
+                <p className="font-medium mb-1">匯入警告:</p>
+                <ul className="list-disc list-inside">
+                  {importErrors.map((error, index) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
             <button
               onClick={handleImport}
               disabled={!file || isImporting}
@@ -215,7 +238,7 @@ const CSVImportExport: React.FC<CSVImportExportProps> = ({
       <div className="mt-4 text-sm text-gray-600">
         <h4 className="font-medium mb-1">CSV格式說明:</h4>
         <p className="mb-2">
-          CSV文件應包含以下列: title, content, subject, educationLevel, errorType, description
+          CSV文件應包含以下列: title, content, subject, educationLevel
         </p>
         <p className="italic">
           請確保CSV文件使用UTF-8編碼，並包含正確的標題行

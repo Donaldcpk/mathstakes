@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -10,6 +10,7 @@ import MistakeFormFiveSteps from './pages/MistakeFormFiveSteps';
 import TestAI from './pages/TestAI';
 import OfflineIndicator from './components/OfflineIndicator';
 import CSVManager from './pages/CSVManager';
+import { setupNetworkListener } from './utils/syncManager';
 
 // 全局錯誤處理組件
 interface ErrorFallbackProps {
@@ -63,6 +64,13 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 function App() {
+  // 初始化網絡監聽器
+  useEffect(() => {
+    // 設置網絡監聽器，處理離線變更
+    setupNetworkListener();
+    console.log('已設置網絡監聽器，將自動同步離線變更');
+  }, []);
+
   return (
     <Router>
       <ErrorBoundary FallbackComponent={ErrorFallback}>

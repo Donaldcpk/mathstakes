@@ -54,12 +54,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           });
           
           // 導航至錯題列表頁
-          console.log('導航至錯題列表頁', new Date().toISOString());
-          
-          // 使用強制頁面刷新處理第三方Cookie或導航問題
-          setTimeout(() => {
-            window.location.href = '/mistakes';
-          }, 500);
+            console.log('導航至錯題列表頁', new Date().toISOString());
+            
+            // 使用強制頁面刷新處理第三方Cookie或導航問題
+            setTimeout(() => {
+              window.location.href = '/mistakes';
+            }, 500);
         } else {
           console.log('沒有重定向結果或用戶信息為空', new Date().toISOString());
         }
@@ -111,12 +111,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         });
         
         // 導航至錯題列表頁
-        console.log('導航至錯題列表頁', new Date().toISOString());
-        
-        // 使用強制頁面刷新處理第三方Cookie或導航問題
-        setTimeout(() => {
-          window.location.href = '/mistakes';
-        }, 500);
+          console.log('導航至錯題列表頁', new Date().toISOString());
+          
+          // 使用強制頁面刷新處理第三方Cookie或導航問題
+          setTimeout(() => {
+            window.location.href = '/mistakes';
+          }, 500);
       } else {
         console.log('彈出窗口登入未返回用戶資料，可能使用了重定向', new Date().toISOString());
         // 重定向方式會在 handleRedirectResult 中處理
