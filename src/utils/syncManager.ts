@@ -111,30 +111,53 @@ export async function syncOfflineChanges(): Promise<{
   let failedCount = 0;
   const remainingItems: string[] = [];
 
-  for (const key of syncQueue) {
+  // 使用Promise.allSettled處理並行同步操作
+  const syncPromises = syncQueue.map(async (key) => {
     try {
+      let success = false;
+      
       // 刪除操作同步
       if (key.startsWith('mistake_delete_')) {
         const mistakeId = key.replace('mistake_delete_', '');
-        const success = await deleteUserMistake(mistakeId);
+        success = await deleteUserMistake(mistakeId);
         
         if (success) {
           console.log(`成功同步刪除錯題: ${mistakeId}`);
           await removeFromSyncQueue(key);
-          syncedCount++;
+          return { key, success: true };
         } else {
           console.error(`同步刪除錯題失敗: ${mistakeId}`);
-          failedCount++;
-          remainingItems.push(key);
+          return { key, success: false };
         }
       }
       // TODO: 添加其他類型的同步處理
+      
+      return { key, success: false };
     } catch (error) {
       console.error(`同步項目 ${key} 失敗:`, error);
-      failedCount++;
-      remainingItems.push(key);
+      return { key, success: false, error };
     }
-  }
+  });
+
+  // 等待所有同步操作完成
+  const results = await Promise.allSettled(syncPromises);
+
+  // 處理結果
+  results.forEach(result => {
+    if (result.status === 'fulfilled') {
+      if (result.value.success) {
+        syncedCount++;
+      } else {
+        failedCount++;
+        remainingItems.push(result.value.key);
+      }
+    } else {
+      failedCount++;
+      // 找出對應的key
+      const index = failedCount - 1 < syncQueue.length ? failedCount - 1 : 0;
+      remainingItems.push(syncQueue[index]);
+    }
+  });
 
   // 更新同步隊列，保留失敗的項目
   if (remainingItems.length > 0) {

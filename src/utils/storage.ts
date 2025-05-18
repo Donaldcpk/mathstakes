@@ -492,7 +492,11 @@ export const initializeSampleData = async (): Promise<void> => {
 // 添加離線同步標記
 // 這個函數保留以向後兼容，但內部使用syncManager
 export async function markForSync(key: string): Promise<void> {
-  await markItemForSync(key);
+  try {
+    await markItemForSync(key);
+  } catch (error) {
+    console.error('標記同步失敗:', error);
+  }
 }
 
 /**
@@ -501,8 +505,13 @@ export async function markForSync(key: string): Promise<void> {
  * @deprecated 請使用 syncManager.syncOfflineChanges
  */
 export async function syncOfflineChanges(): Promise<void> {
-  // 使用syncManager中的實現
-  await syncOfflineChangesFromManager();
+  try {
+    // 使用syncManager中的實現
+    await syncOfflineChangesFromManager();
+  } catch (error) {
+    console.error('同步離線變更失敗:', error);
+    toast.error('同步失敗，請稍後再試');
+  }
 }
 
 /**

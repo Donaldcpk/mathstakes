@@ -2,6 +2,7 @@ import { deleteUserMistake } from './firebase';
 import localforage from 'localforage';
 import { isUserLoggedIn, getUserId } from './storage';
 import { toast } from 'react-hot-toast';
+import { markForSync } from './syncManager';
 
 // 緩存參考
 let cachedMistakes: any[] | null = null;
@@ -22,9 +23,13 @@ export const batchDeleteMistakes = async (
   const errors: string[] = [];
   let deletedCount = 0;
   let isCloudSuccess = true;
+  const failedCloudIds: string[] = [];
 
   try {
     console.log(`開始批次刪除 ${mistakeIds.length} 個錯題`);
+    
+    // 顯示刪除中的提示
+    const toastId = toast.loading(`正在刪除 ${mistakeIds.length} 個錯題...`);
     
     // 1. 從本地存儲獲取所有錯題
     const localMistakes = await localforage.getItem<any[]>(MISTAKES_KEY) || [];
@@ -40,11 +45,14 @@ export const batchDeleteMistakes = async (
             const success = await deleteUserMistake(id);
             if (!success) {
               errors.push(`雲端刪除錯題 ${id} 失敗`);
+              failedCloudIds.push(id);
               isCloudSuccess = false;
             }
             return {id, success};
           } catch (error) {
+            console.error(`雲端刪除錯題 ${id} 時發生錯誤:`, error);
             errors.push(`雲端刪除錯題 ${id} 時發生錯誤: ${error instanceof Error ? error.message : '未知錯誤'}`);
+            failedCloudIds.push(id);
             isCloudSuccess = false;
             return {id, success: false};
           }
@@ -56,6 +64,16 @@ export const batchDeleteMistakes = async (
             deletedCount++;
           }
         });
+        
+        // 將雲端刪除失敗的項目標記為待同步
+        for (const id of failedCloudIds) {
+          try {
+            await markForSync(`mistake_delete_${id}`);
+            console.log(`已將錯題 ${id} 標記為待同步刪除`);
+          } catch (syncError) {
+            console.error(`標記錯題 ${id} 為待同步刪除失敗:`, syncError);
+          }
+        }
       }
     } else {
       // 未登入用戶只進行本地刪除
@@ -74,18 +92,18 @@ export const batchDeleteMistakes = async (
     
     // 5. 提示用戶
     if (errors.length === 0) {
-      toast.success(`成功刪除 ${deletedCount} 個錯題`);
+      toast.success(`成功刪除 ${deletedCount} 個錯題`, { id: toastId });
       return {success: true, deletedCount, errors: []};
     } else if (deletedCount > 0) {
       // 部分成功
-      toast.success(`本地成功刪除 ${deletedCount} 個錯題`);
+      toast.success(`本地成功刪除 ${mistakeIds.length} 個錯題`, { id: toastId });
       if (!isCloudSuccess) {
-        toast.error('部分錯題無法在雲端刪除，將在下次連線時同步');
+        toast.error('部分錯題無法在雲端刪除，將在下次連線時同步', { duration: 5000 });
       }
-      return {success: true, deletedCount, errors};
+      return {success: true, deletedCount: mistakeIds.length, errors};
     } else {
       // 全部失敗
-      toast.error('刪除錯題失敗，請重試');
+      toast.error('刪除錯題失敗，請重試', { id: toastId });
       return {success: false, deletedCount: 0, errors};
     }
   } catch (error) {

@@ -4,7 +4,7 @@
  */
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import OpenCC from 'opencc-js';
+import * as OpenCC from 'opencc-js';
 
 // 初始化OpenCC簡繁轉換器
 const converter = OpenCC.Converter({ from: 'cn', to: 'tw' });

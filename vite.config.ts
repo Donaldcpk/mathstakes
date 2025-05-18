@@ -42,6 +42,7 @@ export default defineConfig({
         ]
       },
       workbox: {
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024, // 3MB
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -74,5 +75,19 @@ export default defineConfig({
   ],
   server: {
     port: 3000,
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage'],
+          ui: ['react-icons', 'react-hot-toast', 'react-error-boundary'],
+          math: ['katex', 'react-katex'],
+          utils: ['uuid', 'localforage', 'xlsx', 'papaparse']
+        }
+      }
+    },
+    chunkSizeWarningLimit: 1000, // 1000 kB
   }
 }) 
