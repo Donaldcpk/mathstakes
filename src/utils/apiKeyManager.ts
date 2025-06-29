@@ -53,7 +53,7 @@ const DEFAULT_API_KEY =
 // 環境變數中的默認模型
 const DEFAULT_MODEL = 
   import.meta.env.VITE_OPENROUTER_MODEL || 
-  'meta-llama/llama-4-maverick:free';
+  'mistralai/mistral-small-3.2-24b-instruct:free';
 
 // 當前使用的金鑰索引
 let currentKeyIndex = 0;

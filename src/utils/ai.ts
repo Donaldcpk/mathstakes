@@ -9,7 +9,7 @@ const AI_CONFIG = {
   responseTimeout: 60000, // 60秒超時
   maxRetries: 3,
   retryDelay: 1000,
-  modelName: 'meta-llama/llama-4-maverick:free', // 固定使用此模型
+  modelName: 'mistralai/mistral-small-3.2-24b-instruct:free', // 固定使用此模型
   temperature: 0.1,
   max_tokens: 4000,
   textGeneration: {
@@ -350,7 +350,7 @@ export const generateAIExplanation = async (mistake: Mistake): Promise<string> =
     // 直接使用第一個硬編碼API金鑰，不使用API保護機制
     let API_KEY = API_KEYS[0];
     
-    console.log('開始生成AI解釋 (模型: meta-llama/llama-4-maverick:free, 金鑰: ' + API_KEY.substring(0, 8) + '...)');
+    console.log('開始生成AI解釋 (模型: mistralai/mistral-small-3.2-24b-instruct:free, 金鑰: ' + API_KEY.substring(0, 8) + '...)');
     
     // 構建系統提示詞 - 簡化判斷邏輯
     const systemPrompt = `你是一位專業數學教師，擅長分析學生的錯題並提供詳細解釋。請針對學生提交的題目，分析可能存在的錯誤，提供完整的解題步驟，並給出學習建議。回答要清晰、準確、易於理解，適合${mistake.educationLevel}學生的認知水平。請使用繁體中文回答，數學公式請使用LaTeX格式（例如：$x^2 + y^2 = r^2$）。`;
