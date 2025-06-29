@@ -9,6 +9,7 @@ import MistakeDetail from './pages/MistakeDetail';
 import MistakeFormFiveSteps from './pages/MistakeFormFiveSteps';
 import TestAI from './pages/TestAI';
 import OfflineIndicator from './components/OfflineIndicator';
+import Footer from './components/Footer';
 import CSVManager from './pages/CSVManager';
 import { setupNetworkListener } from './utils/syncManager';
 
@@ -75,8 +76,10 @@ function App() {
     <Router>
       <ErrorBoundary FallbackComponent={ErrorFallback}>
         <AuthProvider>
+          <div className="flex flex-col min-h-screen">
           <Toaster position="top-center" />
           <OfflineIndicator />
+            <div className="flex-grow">
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/mistakes" element={<PrivateRoute><MistakeList /></PrivateRoute>} />
@@ -86,6 +89,9 @@ function App() {
             <Route path="/test-ai" element={<TestAI />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+            </div>
+            <Footer />
+          </div>
         </AuthProvider>
       </ErrorBoundary>
     </Router>

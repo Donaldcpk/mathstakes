@@ -1,38 +1,71 @@
-import React, { useEffect, useRef } from 'react';
-import { renderMathContent } from '../utils/formulaFormatter';
+import React, { useEffect, useState } from 'react';
+import 'katex/dist/katex.min.css';
+import katex from 'katex';
 
 interface MathDisplayProps {
-  math: string;
+  content: string;
   className?: string;
 }
 
 /**
- * 數學公式顯示組件
- * 能夠渲染包含LaTeX數學公式的文本
+ * 將文本中的數學公式轉換為KaTeX渲染的HTML
+ * 支持以下格式的公式:
+ * 1. 美元符號包圍的內聯公式: $formula$
+ * 2. 雙美元符號包圍的塊級公式: $$formula$$
  */
-const MathDisplay: React.FC<MathDisplayProps> = ({ math, className = '' }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  
-  // 使用KaTeX渲染數學公式
+const MathDisplay: React.FC<MathDisplayProps> = ({ content, className = '' }) => {
+  const [processedContent, setProcessedContent] = useState<string>('');
+
   useEffect(() => {
-    if (!math || !containerRef.current) return;
-    
-    // 使用MathJax渲染 (如果可用)
-    if (window.MathJax && window.MathJax.typeset) {
-      window.MathJax.typeset([containerRef.current]);
+    if (!content) {
+      setProcessedContent('');
+      return;
     }
-  }, [math]);
-  
-  if (!math) return null;
-  
-  // 使用formulaFormatter處理數學公式
-  const renderedContent = renderMathContent(math);
-  
+
+    try {
+      // 找出文本中的所有數學公式（使用正則表達式）
+      // 匹配 $...$ 作為內聯公式
+      // 匹配 $$...$$ 作為塊級公式
+      
+      // 替換塊級公式（$$...$$）
+      let result = content.replace(/\$\$(.*?)\$\$/g, (match, formula) => {
+        try {
+          const html = katex.renderToString(formula.trim(), {
+            displayMode: true,
+            throwOnError: false
+          });
+          return `<div class="math-block">${html}</div>`;
+        } catch (err) {
+          console.error('KaTeX渲染塊級公式出錯:', err);
+          return match; // 如果渲染失敗，保留原樣
+        }
+      });
+      
+      // 替換內聯公式（$...$）
+      result = result.replace(/\$([^\$]+?)\$/g, (match, formula) => {
+        try {
+          const html = katex.renderToString(formula.trim(), {
+            displayMode: false,
+            throwOnError: false
+          });
+          return `<span class="math-inline">${html}</span>`;
+        } catch (err) {
+          console.error('KaTeX渲染內聯公式出錯:', err);
+          return match; // 如果渲染失敗，保留原樣
+        }
+      });
+      
+      setProcessedContent(result);
+    } catch (error) {
+      console.error('處理數學公式時出錯:', error);
+      setProcessedContent(content); // 出錯時顯示原始內容
+    }
+  }, [content]);
+
   return (
     <div 
-      ref={containerRef}
-      className={className}
-      dangerouslySetInnerHTML={{ __html: renderedContent }} 
+      className={`math-display ${className}`}
+      dangerouslySetInnerHTML={{ __html: processedContent }}
     />
   );
 };

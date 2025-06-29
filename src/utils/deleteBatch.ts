@@ -1,118 +1,101 @@
-import { deleteUserMistake } from './firebase';
-import localforage from 'localforage';
-import { isUserLoggedIn, getUserId } from './storage';
+import { db } from './firebase';
+import { collection, doc, deleteDoc } from 'firebase/firestore';
+import { addPendingOperation, OPERATION_TYPES } from './pendingOperations';
+import { getCurrentUserAuthStatus } from './auth';
 import { toast } from 'react-hot-toast';
-import { markForSync } from './syncManager';
-
-// 緩存參考
-let cachedMistakes: any[] | null = null;
-const MISTAKES_KEY = 'mistakes';
+import { getMistakes, deleteMistake } from './storage';
 
 /**
- * 批次刪除錯題
- * @param mistakeIds 要刪除的錯題ID陣列
- * @returns {Promise<{success: boolean, deletedCount: number, errors: string[]}>} 刪除結果
+ * 批量刪除錯題
+ * @param mistakeIds 要刪除的錯題ID數組
+ * @returns 操作結果
  */
-export const batchDeleteMistakes = async (
-  mistakeIds: string[]
-): Promise<{success: boolean, deletedCount: number, errors: string[]}> => {
-  if (!mistakeIds || mistakeIds.length === 0) {
-    return {success: false, deletedCount: 0, errors: ['沒有提供要刪除的錯題ID']};
+export const batchDeleteMistakes = async (mistakeIds: string[]): Promise<{success: boolean, failed: string[], succeeded: string[]}> => {
+  if (!mistakeIds.length) {
+    return {success: false, failed: [], succeeded: []};
   }
-
-  const errors: string[] = [];
-  let deletedCount = 0;
-  let isCloudSuccess = true;
-  const failedCloudIds: string[] = [];
-
-  try {
+  
+  const { isOnline, isLoggedIn, currentUser } = await getCurrentUserAuthStatus();
+  const failed: string[] = [];
+  const succeeded: string[] = [];
+  
+  // 如果在線且已登錄，嘗試直接刪除
+  if (isOnline && isLoggedIn && currentUser) {
     console.log(`開始批次刪除 ${mistakeIds.length} 個錯題`);
     
-    // 顯示刪除中的提示
-    const toastId = toast.loading(`正在刪除 ${mistakeIds.length} 個錯題...`);
-    
-    // 1. 從本地存儲獲取所有錯題
-    const localMistakes = await localforage.getItem<any[]>(MISTAKES_KEY) || [];
-    const filteredMistakes = localMistakes.filter(mistake => !mistakeIds.includes(mistake.id));
-    
-    // 2. 如果用戶已登入，嘗試從Firebase刪除
-    if (isUserLoggedIn()) {
-      const userId = getUserId();
-      if (userId) {
-        // 使用Promise.allSettled允許部分成功
-        const deletePromises = mistakeIds.map(async (id) => {
-          try {
-            const success = await deleteUserMistake(id);
-            if (!success) {
-              errors.push(`雲端刪除錯題 ${id} 失敗`);
-              failedCloudIds.push(id);
-              isCloudSuccess = false;
-            }
-            return {id, success};
-          } catch (error) {
-            console.error(`雲端刪除錯題 ${id} 時發生錯誤:`, error);
-            errors.push(`雲端刪除錯題 ${id} 時發生錯誤: ${error instanceof Error ? error.message : '未知錯誤'}`);
-            failedCloudIds.push(id);
-            isCloudSuccess = false;
-            return {id, success: false};
-          }
+    for (const id of mistakeIds) {
+      try {
+        // 嘗試從Firestore直接刪除
+        const mistakeRef = doc(db, 'mistakes', id);
+        await deleteDoc(mistakeRef);
+        
+        // 同時從本地刪除
+        await deleteMistake(id);
+        succeeded.push(id);
+        
+        console.log(`成功刪除錯題 ${id}`);
+      } catch (error) {
+        console.error(`刪除錯題失敗 ${id}:`, error);
+        
+        // 如果Firebase刪除失敗，標記為待同步刪除
+        const operationId = `mistake_delete_${id}`;
+        await addPendingOperation(operationId, {
+          type: OPERATION_TYPES.DELETE,
+          path: `mistakes/${id}`,
+          data: null,
+          timestamp: new Date().toISOString()
         });
         
-        const results = await Promise.allSettled(deletePromises);
-        results.forEach(result => {
-          if (result.status === 'fulfilled' && result.value.success) {
-            deletedCount++;
-          }
-        });
+        console.log(`已將錯題 ${id} 標記為待同步刪除`);
         
-        // 將雲端刪除失敗的項目標記為待同步
-        for (const id of failedCloudIds) {
-          try {
-            await markForSync(`mistake_delete_${id}`);
-            console.log(`已將錯題 ${id} 標記為待同步刪除`);
-          } catch (syncError) {
-            console.error(`標記錯題 ${id} 為待同步刪除失敗:`, syncError);
-          }
+        // 仍然嘗試從本地刪除
+        try {
+          await deleteMistake(id);
+          succeeded.push(id);
+        } catch (localError) {
+          console.error(`本地刪除錯題失敗 ${id}:`, localError);
+          failed.push(id);
         }
       }
-    } else {
-      // 未登入用戶只進行本地刪除
-      deletedCount = mistakeIds.length;
     }
+  } else {
+    // 離線模式：僅添加到待同步操作，並從本地刪除
+    console.log(`離線模式下批次刪除 ${mistakeIds.length} 個錯題`);
     
-    // 3. 更新本地存儲
-    await localforage.setItem(MISTAKES_KEY, filteredMistakes);
-    
-    // 4. 更新緩存
-    if (cachedMistakes) {
-      cachedMistakes = cachedMistakes.filter(mistake => !mistakeIds.includes(mistake.id));
-    }
-    
-    console.log(`批次刪除完成: 成功刪除 ${deletedCount} 個錯題，失敗 ${errors.length} 個`);
-    
-    // 5. 提示用戶
-    if (errors.length === 0) {
-      toast.success(`成功刪除 ${deletedCount} 個錯題`, { id: toastId });
-      return {success: true, deletedCount, errors: []};
-    } else if (deletedCount > 0) {
-      // 部分成功
-      toast.success(`本地成功刪除 ${mistakeIds.length} 個錯題`, { id: toastId });
-      if (!isCloudSuccess) {
-        toast.error('部分錯題無法在雲端刪除，將在下次連線時同步', { duration: 5000 });
+    for (const id of mistakeIds) {
+      try {
+        // 標記為待同步刪除
+        const operationId = `mistake_delete_${id}`;
+        await addPendingOperation(operationId, {
+          type: OPERATION_TYPES.DELETE,
+          path: `mistakes/${id}`,
+          data: null,
+          timestamp: new Date().toISOString()
+        });
+        
+        // 從本地刪除
+        await deleteMistake(id);
+        succeeded.push(id);
+        
+        console.log(`已將錯題 ${id} 標記為待同步刪除`);
+      } catch (error) {
+        console.error(`離線模式下刪除錯題失敗 ${id}:`, error);
+        failed.push(id);
       }
-      return {success: true, deletedCount: mistakeIds.length, errors};
-    } else {
-      // 全部失敗
-      toast.error('刪除錯題失敗，請重試', { id: toastId });
-      return {success: false, deletedCount: 0, errors};
     }
-  } catch (error) {
-    console.error('批次刪除錯題時發生錯誤:', error);
-    const errorMessage = error instanceof Error ? error.message : '未知錯誤';
-    errors.push(`批次刪除時發生系統錯誤: ${errorMessage}`);
-    toast.error('刪除失敗，請稍後重試');
-    return {success: false, deletedCount, errors};
   }
+  
+  console.log(`批次刪除完成: 成功刪除 ${succeeded.length} 個錯題，失敗 ${failed.length} 個`);
+  
+  if (failed.length > 0) {
+    toast.error(`${failed.length} 個錯題刪除失敗，將在網絡連接時自動重試`);
+  }
+  
+  return {
+    success: succeeded.length > 0,
+    failed,
+    succeeded
+  };
 };
 
 /**

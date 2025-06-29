@@ -1,17 +1,34 @@
 /**
  * 格式化日期
- * @param dateString 日期字符串或Date對象
- * @returns 格式化後的日期字符串，例如：2023年05月21日 (星期日)
+ * @param dateString 日期字符串
+ * @returns 格式化後的日期字符串
  */
-export const formatDate = (dateString: string | Date): string => {
-  const date = new Date(dateString);
-  const year = date.getFullYear();
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
-  const weekDay = weekDays[date.getDay()];
+export const formatDate = (dateString: string | undefined): string => {
+  if (!dateString) {
+    return '未知日期';
+  }
   
-  return `${year}年${month}月${day}日 (星期${weekDay})`;
+  try {
+    const date = new Date(dateString);
+    
+    // 檢查日期是否有效
+    if (isNaN(date.getTime())) {
+      return '日期格式錯誤';
+    }
+    
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    
+    // 獲取星期幾
+    const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+    const weekDay = weekDays[date.getDay()];
+    
+    return `${year}年${month}月${day}日 (星期${weekDay})`;
+  } catch (error) {
+    console.error('日期格式化錯誤:', error);
+    return '日期格式錯誤';
+  }
 };
 
 /**

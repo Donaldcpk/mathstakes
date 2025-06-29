@@ -88,14 +88,14 @@ export async function withRetry<T>(
       
       retryCount++;
     }
-  }
-  
+      }
+
   // 如果所有重試都失敗，拋出最後一個錯誤
   if (lastError) {
     console.error('所有重試嘗試都失敗:', lastError);
-    throw lastError;
-  }
-  
+  throw lastError;
+}
+
   // 不應該到達這裏，但為了類型安全
   throw new Error('未知錯誤');
 }

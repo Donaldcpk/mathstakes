@@ -33,6 +33,23 @@ enum PastPaperType {
   DSE = 'DSE'
 }
 
+// 在組件頂部添加一個新函數來處理LaTeX轉換
+const convertToLatex = (text: string): string => {
+  if (!text) return '';
+  
+  // 替換行內數學公式 (使用單個$符號包圍的文本)
+  let result = text.replace(/\$([^\$]+?)\$/g, (match, formula) => {
+    return `$${formula}$`;
+  });
+  
+  // 替換塊級數學公式 (使用兩個$符號包圍的文本)
+  result = result.replace(/\$\$([^\$]+?)\$\$/g, (match, formula) => {
+    return `$$${formula}$$`;
+  });
+  
+  return result;
+};
+
 const MistakeFormFiveSteps: React.FC = () => {
   const navigate = useNavigate();
   
@@ -60,9 +77,9 @@ const MistakeFormFiveSteps: React.FC = () => {
   const [userAnswer, setUserAnswer] = useState('');
   
   // 第四步：AI解釋
-  const [question1, setQuestion1] = useState('這種題目的正確答案是什麼？');
-  const [question2, setQuestion2] = useState('這種題目假設是該年級生的三個常犯錯誤是什麼？');
-  const [question3, setQuestion3] = useState('日後如何避免面對這種題目犯錯，給予三個實際符合學生需要的建議。');
+  const [question1, setQuestion1] = useState('這種題目的正確答案是什麼？請一步步詳細解釋解題過程');
+  const [question2, setQuestion2] = useState('針對此類型的題目，學生在解答過程中常會犯哪些具體錯誤？每種錯誤的根本原因是什麼？');
+  const [question3, setQuestion3] = useState('如何避免在解答這類題目時犯錯？請給出針對性的學習建議和解題技巧');
   const [explanation, setExplanation] = useState('');
   
   // 第五步：總結和CSV生成
@@ -72,6 +89,9 @@ const MistakeFormFiveSteps: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<FormStep>(FormStep.BASIC_INFO);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingError, setProcessingError] = useState('');
+  
+  // 在MistakeFormFiveSteps組件中添加狀態
+  const [isLatexFormatted, setIsLatexFormatted] = useState(false);
   
   // 處理圖片上傳
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -200,11 +220,11 @@ const MistakeFormFiveSteps: React.FC = () => {
       const combinedErrorType = errorTypes.join(', ') + 
         (otherErrorType ? (', ' + otherErrorType) : '');
       
-      // 創建問題列表
+      // 改進問題列表，使其更具針對性
       const questionsList = `
-1. ${question1}
-2. ${question2}
-3. ${question3}
+1. ${question1} 請詳細列出解題的完整步驟和正確答案，必須確保答案計算無誤。
+2. ${question2} 請具體指出在「${subject}」這一課題中，學生常犯的明確錯誤，至少列出3個與本題直接相關的具體錯誤類型並說明原因。
+3. ${question3} 請提供至少3個針對「${subject}」課題的具體學習策略，避免籠統或通用的建議，而是提供這類特定題目的解題技巧。
       `;
       
       const aiResponse = await generateAIExplanation({
@@ -219,7 +239,7 @@ const MistakeFormFiveSteps: React.FC = () => {
         userAnswer: userAnswer || undefined,
         createdAt: new Date().toISOString(),
         imageUrl: imagePreview || undefined,
-        explanation: `錯誤類型：${combinedErrorType}\n\n${questionsList}`
+        explanation: `錯誤類型：${combinedErrorType}\n年級：${grade}\n課題：${subject}\n題目描述：${content}\n學生錯誤答案：${userAnswer || '未提供'}\n\n${questionsList}`
       });
       
       setExplanation(aiResponse);
@@ -627,7 +647,10 @@ const MistakeFormFiveSteps: React.FC = () => {
         <label className="block text-sm font-medium text-gray-700 mb-2">
           上傳題目圖片
         </label>
-        <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+        <div 
+          className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:bg-gray-50 cursor-pointer transition-colors"
+          onClick={() => document.getElementById('file-upload')?.click()}
+        >
           <div className="space-y-1 text-center">
             {!imagePreview ? (
               <>
@@ -645,15 +668,14 @@ const MistakeFormFiveSteps: React.FC = () => {
                     strokeLinejoin="round"
                   />
                 </svg>
-                <div className="flex text-sm text-gray-600">
+                <div className="flex justify-center text-sm text-gray-600">
                   <label
                     htmlFor="file-upload"
                     className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500"
                   >
-                    <span>上傳圖片</span>
+                    <span>點擊此處或整個區域上傳圖片</span>
                     <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleImageChange} accept="image/*" />
                   </label>
-                  <p className="pl-1">或拖放圖片到此處</p>
                 </div>
                 <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
               </>
@@ -662,7 +684,10 @@ const MistakeFormFiveSteps: React.FC = () => {
                 <img src={imagePreview} alt="題目預覽" className="max-h-64 max-w-full mx-auto" />
                 <button
                   type="button"
-                  onClick={() => setImagePreview(null)}
+                  onClick={(e) => {
+                    e.stopPropagation(); // 阻止事件冒泡
+                    setImagePreview(null);
+                  }}
                   className="absolute top-0 right-0 -mt-2 -mr-2 bg-red-500 text-white rounded-full p-1"
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -966,37 +991,13 @@ const MistakeFormFiveSteps: React.FC = () => {
     // 初始化 isEditing 變數，解決未定義錯誤
     const isEditing = false;
     
-    // 格式化 AI 解釋，分三段顯示
+    // 格式化 AI 解釋，確保內容能夠正確顯示
     const formatAIExplanation = (text: string) => {
-      if (!text) return '';
+      if (!text) return '暫無內容';
       
-      // 尋找問題 1, 2, 3 的答案，並分段顯示
-      const parts = text.split(/(\d+\.\s+)/g);
-      let formattedText = '';
-      let questionCount = 0;
-      
-      for (let i = 0; i < parts.length; i++) {
-        if (parts[i].match(/\d+\.\s+/)) {
-          // 這是問題編號
-          if (questionCount > 0) {
-            // 在每個問題之間添加空行
-            formattedText += '\n\n';
-          }
-          formattedText += parts[i];
-          questionCount++;
-          
-          // 添加問題內容
-          if (i + 1 < parts.length) {
-            formattedText += parts[i + 1];
-            i++;  // 跳過已處理的內容
-          }
-        } else if (i === 0 && parts[i].trim()) {
-          // 處理開頭的文字（如果有）
-          formattedText += parts[i];
-        }
-      }
-      
-      return formattedText;
+      console.log("原始AI解釋內容:", text); // 添加日誌以便調試
+      // 簡化處理邏輯，確保能夠顯示任何內容
+      return text;
     };
     
     return (
@@ -1086,8 +1087,23 @@ const MistakeFormFiveSteps: React.FC = () => {
             </div>
           ) : (
             <div className="bg-white border border-gray-200 rounded-md p-4 prose max-w-none">
-              <MathDisplay content={formatAIExplanation(explanation)} isBlock={false} />
-              <div className="mt-4 flex justify-end">
+              {/* 使用MathDisplay組件顯示內容，根據isLatexFormatted決定是否轉換 */}
+              <div className="whitespace-pre-wrap">
+                {isLatexFormatted ? (
+                  <MathDisplay content={explanation} className="whitespace-pre-wrap" />
+                ) : (
+                  <pre className="whitespace-pre-wrap">{explanation}</pre>
+                )}
+              </div>
+              
+              <div className="mt-4 flex justify-end space-x-2">
+                <button
+                  type="button"
+                  className={`px-3 py-1 text-sm ${isLatexFormatted ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'} rounded-md hover:bg-opacity-80 focus:outline-none focus:ring-1 focus:ring-blue-300`}
+                  onClick={() => setIsLatexFormatted(!isLatexFormatted)}
+                >
+                  {isLatexFormatted ? '顯示普通文本' : '顯示數學公式'}
+                </button>
                 <button
                   type="button"
                   className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-gray-300"

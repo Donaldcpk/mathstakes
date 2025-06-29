@@ -7,6 +7,7 @@ import MathDisplay from '../components/MathDisplay';
 import { IoArrowBack, IoTrash, IoRefresh, IoClose } from 'react-icons/io5';
 import { formatDate } from '../utils/helpers';
 import { getMathJaxConfig, containsLatexFormula } from '../utils/formulaFormatter';
+import AIExplanation from '../components/AIExplanation';
 
 const MistakeDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -233,11 +234,11 @@ const MistakeDetail: React.FC = () => {
               <div className="mb-6">
                 <h2 className="text-lg font-medium text-gray-900 dark:text-white">錯題圖片</h2>
                 <div className="mt-2 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
-                  <img 
+                      <img 
                     src={mistake.imageUrl}
                     alt="錯題圖片"
                     className="w-full object-contain max-h-96"
-                  />
+                      />
                 </div>
               </div>
             )}
@@ -274,23 +275,20 @@ const MistakeDetail: React.FC = () => {
             </div>
             
             {mistake.explanation ? (
-              <div className="mt-6">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">AI分析與解釋</h3>
-                <div className="p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg shadow-inner whitespace-pre-line">
-                  {containsLatexFormula(mistake.explanation) 
-                    ? <MathDisplay math={mistake.explanation} />
-                    : mistake.explanation
-                  }
+              <div className="mb-6">
+                <h2 className="text-xl font-bold text-gray-800 mb-4">AI解釋</h2>
+                <div className="bg-white p-4 rounded-lg shadow-md">
+                  <AIExplanation explanation={mistake.explanation} />
                 </div>
               </div>
             ) : (
               <div className="mt-6">
-                <div className="text-center py-8 px-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                <div className="text-center py-8 px-4 bg-yellow-50 rounded-lg">
                   <svg className="mx-auto h-12 w-12 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <h3 className="mt-2 text-sm font-medium text-yellow-800 dark:text-yellow-200">尚未生成AI解釋</h3>
-                  <p className="mt-1 text-sm text-yellow-700 dark:text-yellow-300">點擊下方按鈕生成關於這個錯題的AI分析</p>
+                  <h3 className="mt-2 text-sm font-medium text-yellow-800">尚未生成AI解釋</h3>
+                  <p className="mt-1 text-sm text-yellow-700">點擊下方按鈕生成關於這個錯題的AI分析</p>
                   <div className="mt-6">
                     <button
                       type="button"
@@ -308,7 +306,9 @@ const MistakeDetail: React.FC = () => {
                         </>
                       ) : (
                         <>
-                          <IoRefresh className="mr-2 -ml-1 h-5 w-5" />
+                          <svg className="mr-2 -ml-1 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
                           生成AI解釋
                         </>
                       )}
@@ -326,7 +326,7 @@ const MistakeDetail: React.FC = () => {
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-medium text-gray-900">確認刪除</h3>
-              <button
+              <button 
                 type="button"
                 onClick={() => setShowDeleteModal(false)}
                 className="text-gray-400 hover:text-gray-500"

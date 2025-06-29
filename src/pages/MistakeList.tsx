@@ -5,7 +5,7 @@ import { getMistakes, initializeSampleData, clearMistakesCache, getMistakesCount
 import { formatDate } from '../utils/helpers';
 import ConfettiExplosion from 'react-confetti-explosion';
 import CSVImportExport from '../components/CSVImportExport';
-import { IoAdd, IoSearch, IoFunnel, IoCloudDownload, IoHome, IoTrash, IoCheckbox, IoSquareOutline } from 'react-icons/io5';
+import { IoAdd, IoSearch, IoFunnel, IoCloudDownload, IoHome, IoTrash, IoCheckbox, IoSquareOutline, IoExitOutline, IoListOutline } from 'react-icons/io5';
 import { FaRegSadTear } from 'react-icons/fa';
 import { Button, Container, Row, Col, Card, Form, Spinner } from 'react-bootstrap';
 import { MdAdd } from 'react-icons/md';
@@ -258,23 +258,24 @@ const MistakeList: React.FC = () => {
   // 渲染表頭
   const renderTableHeader = () => {
     return (
-      <thead className="mistake-list-header">
+      <thead className="bg-gray-100 text-gray-700">
         <tr>
           {isBatchMode && (
-            <th style={{ width: '40px' }}>
+            <th className="px-3 py-3 text-center" style={{ width: '60px' }}>
               <input
                 type="checkbox"
                 checked={selectedMistakes.size === filteredMistakes.length && filteredMistakes.length > 0}
                 onChange={toggleSelectAll}
+                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                 aria-label="全選/取消全選"
               />
             </th>
           )}
-          <th>標題</th>
-          <th>科目</th>
-          <th>錯誤類型</th>
-          <th>日期</th>
-          <th>操作</th>
+          <th className="px-4 py-3 text-left font-medium">標題</th>
+          <th className="px-4 py-3 text-left font-medium">科目</th>
+          <th className="px-4 py-3 text-left font-medium">錯誤類型</th>
+          <th className="px-4 py-3 text-left font-medium">日期</th>
+          <th className="px-4 py-3 text-left font-medium">操作</th>
         </tr>
       </thead>
     );
@@ -282,17 +283,17 @@ const MistakeList: React.FC = () => {
 
   // 渲染表格內容
   const renderMistakesList = () => {
-    return filteredMistakes.map((mistake) => {
+    return filteredMistakes.map((mistake, index) => {
       const formattedDate = formatDate(mistake.createdAt);
 
       return (
         <tr
           key={mistake.id}
-          className={selectedMistakes.has(mistake.id) ? "selected-row" : ""}
+          className={`${selectedMistakes.has(mistake.id) ? "selected-row" : ""} ${index % 2 === 0 ? 'bg-gray-50' : 'bg-white'} hover:bg-blue-50 transition-colors`}
           onClick={isBatchMode ? () => toggleMistakeSelection(mistake.id) : undefined}
         >
           {isBatchMode && (
-            <td>
+            <td className="px-3 py-2 text-center">
               <input
                 type="checkbox"
                 checked={selectedMistakes.has(mistake.id)}
@@ -300,26 +301,31 @@ const MistakeList: React.FC = () => {
                   e.stopPropagation();
                   toggleMistakeSelection(mistake.id);
                 }}
+                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                 aria-label={`選擇錯題: ${mistake.title}`}
               />
             </td>
           )}
-          <td>
+          <td className="px-4 py-3 font-medium">
             {isBatchMode ? (
               mistake.title
             ) : (
-              <Link to={`/mistake/${mistake.id}`} className="mistake-link">
+              <Link to={`/mistake/${mistake.id}`} className="text-blue-600 hover:text-blue-800 hover:underline transition-colors">
                 {mistake.title}
               </Link>
             )}
           </td>
-          <td>{mistake.subject}</td>
-          <td>{mistake.errorType}</td>
-          <td>{formattedDate}</td>
-          <td>
+          <td className="px-4 py-3">{mistake.subject}</td>
+          <td className="px-4 py-3">
+            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+              {mistake.errorType}
+            </span>
+          </td>
+          <td className="px-4 py-3 text-gray-600 text-sm">{formattedDate}</td>
+          <td className="px-4 py-3">
             {!isBatchMode && (
-              <div className="action-buttons">
-                <Link to={`/mistake/${mistake.id}/edit`} className="edit-button">
+              <div className="flex gap-2">
+                <Link to={`/mistake/${mistake.id}/edit`} className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm transition-colors">
                   編輯
                 </Link>
               </div>
@@ -363,20 +369,48 @@ const MistakeList: React.FC = () => {
         
         <div className="flex space-x-2">
           <button
-            className={`batch-mode-button ${isBatchMode ? 'active' : ''}`}
+            className={`px-4 py-2 rounded-lg flex items-center transition-colors ${
+              isBatchMode ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
             onClick={toggleBatchMode}
             disabled={isLoading}
           >
-            {isBatchMode ? '退出批次模式' : '批次操作'}
+            {isBatchMode ? (
+              <>
+                <IoExitOutline className="mr-1" /> 退出批次模式
+              </>
+            ) : (
+              <>
+                <IoListOutline className="mr-1" /> 批次操作
+              </>
+            )}
           </button>
           
           {isBatchMode && (
             <button 
-              className="batch-delete-button"
+              className={`px-4 py-2 rounded-lg flex items-center transition-colors ${
+                selectedMistakes.size === 0 
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                : 'bg-red-600 text-white hover:bg-red-700'
+              }`}
               onClick={handleBatchDelete}
               disabled={isDeleting || selectedMistakes.size === 0}
             >
-              {isDeleting ? '刪除中...' : `刪除所選(${selectedMistakes.size})`}
+              {isDeleting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                  刪除中...
+                </>
+              ) : (
+                <>
+                  <IoTrash className="mr-1" /> 刪除所選
+                  {selectedMistakes.size > 0 && (
+                    <span className="ml-1 bg-white text-red-600 text-xs px-2 py-0.5 rounded-full font-medium">
+                      {selectedMistakes.size}
+                    </span>
+                  )}
+                </>
+              )}
             </button>
           )}
           
@@ -597,13 +631,13 @@ const MistakeList: React.FC = () => {
             {searchTerm && ` (包含: "${searchTerm}")`}
             {isBatchMode && selectedMistakes.size > 0 && ` (已選擇: ${selectedMistakes.size})`}
           </p>
-          
+                  
           {isBatchMode && (
             <div className="batch-mode-hint">
               <p>批次模式: 點擊錯題可選中，再次點擊取消選中。選中後可進行批次刪除操作。</p>
-            </div>
-          )}
-          
+                    </div>
+                  )}
+                  
           <div className="mistake-table-container">
             <table className="mistake-table">
               {renderTableHeader()}

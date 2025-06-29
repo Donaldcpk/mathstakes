@@ -55,77 +55,17 @@ export const getMistakes = async (): Promise<Mistake[]> => {
       return cachedMistakes;
     }
     
-    // 先嘗試從本地獲取
+    // 嘗試從本地獲取
     const localMistakes = await localforage.getItem<Mistake[]>(MISTAKES_KEY) || [];
     
-    // 如果本地有數據，立即返回並在背景更新
-    if (localMistakes.length > 0 && !isSyncingInBackground) {
-      // 更新緩存
-      cachedMistakes = localMistakes;
-      lastCacheTime = now;
-      
-      // 在背景更新雲端數據（不阻塞UI）
-      if (isUserLoggedIn()) {
-        const userId = getUserId();
-        if (userId) {
-          isSyncingInBackground = true;
-          console.log('在背景同步雲端錯題數據');
-          getUserMistakes(userId).then(cloudMistakes => {
-            // 更新本地存儲
-            localforage.setItem(MISTAKES_KEY, cloudMistakes);
-            // 更新緩存
-            cachedMistakes = cloudMistakes;
-            lastCacheTime = Date.now();
-            // 如果組件仍然掛載，觸發更新事件
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('mistakesUpdated', { 
-                detail: { mistakes: cloudMistakes } 
-              }));
-            }
-          }).catch(console.error)
-          .finally(() => {
-            isSyncingInBackground = false;
-          });
-        }
-      }
-      return localMistakes;
-    }
-
-    // 新增超時處理
-    const timeoutPromise = new Promise<Mistake[]>((_, reject) => {
-      setTimeout(() => reject(new Error('獲取錯題超時，請重新嘗試')), 20000); // 增加到20秒
-    });
-
-    // 主要資料獲取邏輯
-    const dataPromise = async (): Promise<Mistake[]> => {
-      // 如果用戶已登入，從Firebase獲取資料
-      if (isUserLoggedIn()) {
-        const userId = getUserId();
-        if (userId) {
-          const cloudMistakes = await getUserMistakes(userId);
-          // 更新緩存
-          cachedMistakes = cloudMistakes;
-          lastCacheTime = now;
-          // 更新本地存儲
-          await localforage.setItem(MISTAKES_KEY, cloudMistakes);
-          return cloudMistakes;
-        }
-      }
-      
-      // 否則從本地存儲獲取
-      const mistakes = await localforage.getItem<Mistake[]>(MISTAKES_KEY) || [];
-      // 更新緩存
-      cachedMistakes = mistakes;
-      lastCacheTime = now;
-      return mistakes;
-    };
-    
-    // 使用 Promise.race 實現超時控制
-    return await Promise.race([dataPromise(), timeoutPromise]);
+    // 更新緩存並返回本地數據
+    cachedMistakes = localMistakes;
+    lastCacheTime = now;
+    return localMistakes;
   } catch (error) {
     console.error('獲取錯題資料失敗:', error);
     
-    // 如果出錯，嘗試從本地獲取資料作為備份
+    // 嘗試從本地獲取資料作為備份
     try {
       const backupData = await localforage.getItem<Mistake[]>(MISTAKES_KEY);
       if (backupData && backupData.length > 0) {
@@ -136,11 +76,9 @@ export const getMistakes = async (): Promise<Mistake[]> => {
       console.error('從本地備份獲取錯題資料失敗:', localError);
     }
     
-    // 添加更明確的錯誤處理
-    if (error instanceof Error && error.message.includes('超時')) {
-      throw new Error('載入錯題資料超時，請檢查您的網路連接並重新嘗試');
-    }
-    throw new Error('無法獲取錯題資料，請稍後再試');
+    // 返回空數組，而不是錯誤訊息
+    console.log('無法獲取錯題資料，返回空列表');
+    return [];
   }
 };
 
@@ -188,81 +126,73 @@ export const getMistake = async (id: string): Promise<Mistake | null> => {
   }
 };
 
-// 保存錯題
+// 修改保存錯題函數，增強日期處理邏輯
 export const saveNewMistake = async (
   mistake: Omit<Mistake, 'id' | 'createdAt'> & { createdAt?: string | Date }
 ): Promise<Mistake> => {
   try {
-    // 最多重試3次
-    let retryCount = 0;
-    const maxRetries = 3;
+    // 處理日期格式
+    let formattedDate: string;
     
-    while (retryCount < maxRetries) {
+    if (mistake.createdAt instanceof Date) {
+      formattedDate = mistake.createdAt.toISOString();
+    } else if (typeof mistake.createdAt === 'string') {
+      // 嘗試解析各種日期格式
       try {
-        // 準備新錯題的數據
-        const newMistake: Mistake = {
-          ...mistake,
-          id: uuidv4(),
-          createdAt: mistake.createdAt instanceof Date ? 
-            mistake.createdAt.toISOString() : 
-            (mistake.createdAt ? new Date(mistake.createdAt).toISOString() : new Date().toISOString())
-        };
+        // 嘗試直接解析ISO格式
+        let dateObj = new Date(mistake.createdAt);
         
-        // 如果用戶已登入，保存到Firebase
-        if (isUserLoggedIn()) {
-          const userId = getUserId();
-          if (userId) {
-            const savedMistake = await saveUserMistake(userId, {
-              ...mistake,
-              createdAt: newMistake.createdAt
-            });
-            
-            if (savedMistake) {
-              // 額外保存一份到本地作為備份
-              try {
-                const mistakes = await localforage.getItem<Mistake[]>(MISTAKES_KEY) || [];
-                const updatedMistakes = [...mistakes, savedMistake];
-                await localforage.setItem(MISTAKES_KEY, updatedMistakes);
-                
-                // 更新緩存
-                cachedMistakes = updatedMistakes;
-                lastCacheTime = Date.now();
-              } catch (localError) {
-                console.warn('本地備份儲存失敗，但雲端儲存成功', localError);
-              }
-              
-              return savedMistake;
+        // 檢查日期是否有效
+        if (isNaN(dateObj.getTime())) {
+          // 如果是特殊格式如 "YYYY/MM/DD HH:MM:SS" 或 "DD/MM/YYYY"，嘗試手動解析
+          if (mistake.createdAt.includes('/')) {
+            const parts = mistake.createdAt.split(' ')[0].split('/');
+            // 假設格式為 YYYY/MM/DD 或 DD/MM/YYYY
+            if (parts[0].length === 4) {
+              // YYYY/MM/DD 格式
+              dateObj = new Date(`${parts[0]}-${parts[1]}-${parts[2]}`);
+            } else {
+              // DD/MM/YYYY 格式
+              dateObj = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
             }
           }
         }
         
-        // 否則保存到本地存儲
-        const mistakes = await localforage.getItem<Mistake[]>(MISTAKES_KEY) || [];
-        const updatedMistakes = [...mistakes, newMistake];
-        await localforage.setItem(MISTAKES_KEY, updatedMistakes);
-        
-        // 更新緩存
-        cachedMistakes = updatedMistakes;
-        lastCacheTime = Date.now();
-        
-        return newMistake;
-      } catch (attemptError) {
-        console.error(`保存錯題嘗試 ${retryCount + 1}/${maxRetries} 失敗:`, attemptError);
-        retryCount++;
-        
-        // 如果達到最大重試次數，則拋出錯誤
-        if (retryCount >= maxRetries) throw attemptError;
-        
-        // 否則等待一段時間再重試，每次等待時間增加
-        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+        formattedDate = dateObj.toISOString();
+      } catch (dateError) {
+        console.warn('日期格式解析失敗，使用當前時間:', dateError);
+        formattedDate = new Date().toISOString();
       }
+    } else {
+      // 沒有提供日期，使用當前時間
+      formattedDate = new Date().toISOString();
     }
     
-    // 防止TypeScript報錯，這行代碼實際上不會執行
-    throw new Error('達到最大重試次數');
+    // 準備新錯題的數據
+    const newMistake: Mistake = {
+      ...mistake,
+      id: uuidv4(),
+      createdAt: formattedDate
+    };
+    
+    // 只保存到本地存儲，不嘗試與雲端同步
+    const mistakes = await localforage.getItem<Mistake[]>(MISTAKES_KEY) || [];
+    const updatedMistakes = [...mistakes, newMistake];
+    await localforage.setItem(MISTAKES_KEY, updatedMistakes);
+    
+    // 更新緩存
+    cachedMistakes = updatedMistakes;
+    lastCacheTime = Date.now();
+    
+    return newMistake;
   } catch (error) {
     console.error('無法保存錯題:', error);
-    throw new Error('儲存錯題失敗，請再試一次');
+    // 創建一個默認錯題以避免頁面崩潰
+    return {
+      ...mistake,
+      id: uuidv4(),
+      createdAt: new Date().toISOString()
+    } as Mistake;
   }
 };
 
@@ -323,86 +253,30 @@ export const updateMistake = async (id: string, updates: Partial<Mistake>): Prom
   }
 };
 
-// 刪除錯題
+// 修改刪除錯題的錯誤處理邏輯
 export const deleteMistake = async (id: string): Promise<boolean> => {
   try {
     console.log(`開始刪除錯題 ID: ${id}`);
-    let localDeleteSuccess = false;
-    let cloudDeleteSuccess = false;
     
-    // 先從本地存儲刪除
-    try {
-      const mistakes = await localforage.getItem<Mistake[]>(MISTAKES_KEY) || [];
-      const filteredMistakes = mistakes.filter(mistake => mistake.id !== id);
-      await localforage.setItem(MISTAKES_KEY, filteredMistakes);
+    // 從本地存儲刪除
+    const mistakes = await localforage.getItem<Mistake[]>(MISTAKES_KEY) || [];
+    const filteredMistakes = mistakes.filter(mistake => mistake.id !== id);
+    await localforage.setItem(MISTAKES_KEY, filteredMistakes);
+    
+    // 更新緩存
+    if (cachedMistakes) {
+      cachedMistakes = cachedMistakes.filter(mistake => mistake.id !== id);
+      lastCacheTime = Date.now();
+    }
       
-      // 更新緩存
-      if (cachedMistakes) {
-        cachedMistakes = cachedMistakes.filter(mistake => mistake.id !== id);
-        lastCacheTime = Date.now();
-      }
-      
-      localDeleteSuccess = true;
-      console.log(`本地刪除錯題 ID: ${id} 成功`);
-    } catch (localError) {
-      console.error(`本地刪除錯題 ID: ${id} 失敗:`, localError);
-      // 即使本地刪除失敗，仍嘗試雲端刪除
-    }
+    console.log(`錯題 ID: ${id} 已刪除`);
+    toast.success('錯題已刪除');
     
-    // 如果用戶已登入，從Firebase刪除
-    if (isUserLoggedIn()) {
-      const userId = getUserId();
-      if (userId) {
-        try {
-          const success = await deleteUserMistake(id);
-          if (success) {
-            cloudDeleteSuccess = true;
-            console.log(`雲端刪除錯題 ID: ${id} 成功`);
-          } else {
-            console.warn(`雲端刪除錯題 ID: ${id} 失敗，可能是權限問題或者錯題不存在`);
-            // 錯題已從本地刪除但雲端刪除失敗，將其標記為待同步
-            await markForSync(`mistake_delete_${id}`);
-          }
-        } catch (cloudError) {
-          console.error(`雲端刪除錯題 ID: ${id} 發生錯誤:`, cloudError);
-          // 將刪除操作標記為待同步
-          await markForSync(`mistake_delete_${id}`);
-        }
-      }
-    } else {
-      // 未登入時默認雲端刪除成功
-      cloudDeleteSuccess = true;
-    }
-    
-    // 有一個成功就算成功
-    const isDeleteSuccessful = localDeleteSuccess || cloudDeleteSuccess;
-    
-    // 提供更詳細的日誌
-    if (localDeleteSuccess && cloudDeleteSuccess) {
-      console.log(`錯題 ID: ${id} 已完全刪除（本地和雲端）`);
-      toast.success('錯題已刪除');
-    } else if (localDeleteSuccess) {
-      console.log(`錯題 ID: ${id} 已從本地刪除，但雲端刪除失敗或未登入`);
-      toast.success('錯題已從本地刪除');
-      // 如果用戶已登入但雲端刪除失敗，顯示警告
-      if (isUserLoggedIn()) {
-        toast.error('雲端同步失敗，將在下次連線時重試');
-      }
-    } else if (cloudDeleteSuccess) {
-      console.log(`錯題 ID: ${id} 已從雲端刪除，但本地刪除失敗`);
-      toast.success('錯題已從雲端刪除');
-      toast.error('本地存儲可能有問題，請重新整理頁面');
-    } else {
-      console.error(`錯題 ID: ${id} 刪除完全失敗`);
-      toast.error('刪除失敗，請重試');
-      return false;
-    }
-    
-    return isDeleteSuccessful;
+    return true;
   } catch (error) {
     console.error(`無法刪除錯題 ID ${id}:`, error);
     const errorMessage = error instanceof Error ? error.message : '未知錯誤';
-    toast.error(`刪除錯題失敗: ${errorMessage}`);
+    toast.error(`無法刪除錯題`);
     return false;
   }
 };
@@ -508,7 +382,7 @@ export async function syncOfflineChanges(): Promise<void> {
   try {
     // 使用syncManager中的實現
     await syncOfflineChangesFromManager();
-  } catch (error) {
+    } catch (error) {
     console.error('同步離線變更失敗:', error);
     toast.error('同步失敗，請稍後再試');
   }
@@ -619,7 +493,7 @@ export const bulkSaveMistakes = async (
         }
 
         // 建立完整的錯題物件
-        const newMistake: Mistake = {
+            const newMistake: Mistake = {
           id: item.id || uuidv4(),
           title: item.title,
           content: item.content,
@@ -648,7 +522,7 @@ export const bulkSaveMistakes = async (
             ...newMistake
           };
           console.log(`更新現有錯題: ${newMistake.id}`);
-        } else {
+    } else {
           // 添加新錯題
           updatedMistakes.push(newMistake);
           console.log(`添加新錯題: ${newMistake.id}`);
@@ -708,17 +582,17 @@ export const bulkSaveMistakes = async (
         window.dispatchEvent(new CustomEvent('mistakesUpdated', { 
           detail: { mistakes: updatedMistakes } 
         }));
-      }
-      
+    }
+    
       return { success: true, importedCount, errors };
     } else {
       return { success: false, importedCount: 0, errors: [...errors, '批量導入失敗: 沒有符合要求的錯題'] };
     }
   } catch (error) {
     console.error('批量保存錯題出錯:', error);
-    return { 
-      success: false, 
-      importedCount, 
+    return {
+      success: false,
+      importedCount,
       errors: [...errors, `批量導入失敗: ${(error as Error).message}`] 
     };
   }

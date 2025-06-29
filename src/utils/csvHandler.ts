@@ -93,15 +93,15 @@ export const parseCSVData = (csvData: string): { mistakes: Partial<Mistake>[], e
       }
       
       try {
-        const values = parseCsvRow(line);
-        
+      const values = parseCsvRow(line);
+      
         // 處理行尾可能多出的空值
         while (values.length > headers.length && values[values.length - 1] === '') {
           values.pop();
         }
         
         // 如果欄位數量不匹配，但差距不大，嘗試修正
-        if (values.length !== headers.length) {
+      if (values.length !== headers.length) {
           console.warn(`第 ${i + 1} 行欄位數量不匹配：預期 ${headers.length} 個欄位，實際有 ${values.length} 個欄位`);
           
           // 如果欄位太少，添加空值
@@ -113,13 +113,13 @@ export const parseCSVData = (csvData: string): { mistakes: Partial<Mistake>[], e
           if (values.length > headers.length) {
             values.length = headers.length;
           }
-        }
-        
-        const mistake: Partial<Mistake> = {};
+      }
+      
+      const mistake: Partial<Mistake> = {};
         let hasMandatoryFields = true;
-        
-        // 將每個欄位的值添加到錯題對象中
-        headers.forEach((header, index) => {
+      
+      // 將每個欄位的值添加到錯題對象中
+      headers.forEach((header, index) => {
           let value = values[index];
           
           // 清理值
@@ -134,30 +134,30 @@ export const parseCSVData = (csvData: string): { mistakes: Partial<Mistake>[], e
             }
             
             if (value !== '') {
-              // @ts-ignore - 動態屬性賦值
+          // @ts-ignore - 動態屬性賦值
               mistake[header] = value;
             }
-          }
-        });
-        
-        // 檢查必需欄位
+        }
+      });
+      
+      // 檢查必需欄位
         if (!hasMandatoryFields) {
           errors.push(`第 ${i + 1} 行缺少必需欄位(title, content, subject)`);
-          continue;
-        }
-        
-        // 添加當前時間戳如果不存在
-        if (!mistake.createdAt) {
-          const now = new Date().toISOString();
-          mistake.createdAt = now;
-        }
+        continue;
+      }
+      
+      // 添加當前時間戳如果不存在
+      if (!mistake.createdAt) {
+        const now = new Date().toISOString();
+        mistake.createdAt = now;
+      }
         
         // 確保空的lastReviewedAt欄位不會破壞匯入
         if (mistake.lastReviewedAt === undefined || mistake.lastReviewedAt === '') {
           mistake.lastReviewedAt = '';
         }
-        
-        mistakes.push(mistake);
+      
+      mistakes.push(mistake);
         console.log(`成功解析第 ${i + 1} 行數據`);
       } catch (lineError) {
         console.error(`解析第 ${i + 1} 行出錯:`, lineError);

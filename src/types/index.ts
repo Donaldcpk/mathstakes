@@ -69,4 +69,21 @@ export interface UserProfile {
   createdAt: string;     // 註冊時間
   updatedAt?: string;    // 最後更新時間
   isProfileComplete: boolean; // 資料是否完整
+}
+
+// 錯題表單數據類型
+export interface MistakeFormData {
+  id?: string;
+  title: string;
+  content: string;
+  imageUrl?: string;
+  subject: string;
+  educationLevel: EducationLevel;
+  topicCategory?: TopicCategory;
+  errorType?: ErrorType;
+  errorSteps?: string;
+  userAnswer?: string;
+  correctAnswer?: string;
+  explanation?: string;
+  tags?: string[];
 } 

@@ -7,6 +7,7 @@
 
 import localforage from 'localforage';
 import { LOCAL_STORAGE_KEYS } from '../constants';
+import { toast } from 'react-hot-toast';
 
 // 密鑰使用統計資料儲存
 const API_KEY_STATS_KEY = 'openrouter_api_key_stats';
@@ -33,15 +34,26 @@ let lastKeyIndex = -1;
 const invalidKeys: Record<string, boolean> = {};
 
 // API金鑰配置
-export type ApiConfig = {
+interface ApiConfig {
   apiKey: string;
-};
+  model: string;
+  isValid: boolean;
+}
 
-// 預設API金鑰
-const DEFAULT_API_KEYS = [
-  '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',
-  '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'
-];
+// 本地存儲中的金鑰名稱
+const API_KEY_STORAGE_KEY = 'mathstakes_api_keys';
+const API_KEY_ACTIVE_INDEX = 'mathstakes_active_api_key_index';
+
+// 環境變數中的默認 API 金鑰
+const DEFAULT_API_KEY = 
+  import.meta.env.VITE_OPENROUTER_API_KEY || 
+  import.meta.env.VITE_OPENROUTER_API_KEY_1 || 
+  import.meta.env.OPENROUTER_API_KEY;
+
+// 環境變數中的默認模型
+const DEFAULT_MODEL = 
+  import.meta.env.VITE_OPENROUTER_MODEL || 
+  'meta-llama/llama-4-maverick:free';
 
 // 當前使用的金鑰索引
 let currentKeyIndex = 0;
@@ -77,7 +89,7 @@ export const getAllApiKeys = (): string[] => {
   
   // 如果沒有環境變數密鑰，使用備用密鑰
   // 注意：這些密鑰僅用於演示，實際使用時需要替換為真實的 API 密鑰
-  return DEFAULT_API_KEYS;
+  return [DEFAULT_API_KEY];
 };
 
 /**
@@ -154,61 +166,109 @@ export const getFallbackApiConfig = () => {
 
 // 導出的 API 配置獲取函數，供其他模塊使用
 export const getApiConfig = (): ApiConfig => {
-  // 檢查當前金鑰是否被標記為無效
-  while (invalidApiKeys.has(DEFAULT_API_KEYS[currentKeyIndex]) && currentKeyIndex < DEFAULT_API_KEYS.length) {
-    currentKeyIndex = (currentKeyIndex + 1) % DEFAULT_API_KEYS.length;
+  // 獲取所有 API 金鑰
+  let apiKeys = loadApiKeys();
+  
+  // 確保有默認金鑰
+  if (apiKeys.length === 0 && DEFAULT_API_KEY) {
+    apiKeys = [{ apiKey: DEFAULT_API_KEY, model: DEFAULT_MODEL, isValid: true }];
+    saveApiKeys(apiKeys);
   }
   
-  // 如果所有金鑰都無效，重置無效金鑰列表並使用第一個金鑰
-  if (invalidApiKeys.size >= DEFAULT_API_KEYS.length) {
-    console.warn('所有API金鑰都已標記為無效，重置狀態並重試');
-    invalidApiKeys.clear();
-    currentKeyIndex = 0;
+  // 如果沒有可用的金鑰，返回空配置
+  if (apiKeys.length === 0) {
+    console.warn('沒有可用的 API 金鑰配置');
+    return { apiKey: '', model: DEFAULT_MODEL, isValid: false };
   }
   
-  // 返回當前可用的API金鑰
-  return {
-    apiKey: DEFAULT_API_KEYS[currentKeyIndex]
-  };
+  // 獲取活動金鑰索引
+  let activeIndex = getActiveKeyIndex();
+  
+  // 確保索引有效
+  if (activeIndex >= apiKeys.length) {
+    activeIndex = 0;
+    setActiveKeyIndex(activeIndex);
+  }
+  
+  // 嘗試找到有效的金鑰
+  let validKeyFound = false;
+  let startIndex = activeIndex;
+  
+  do {
+    if (apiKeys[activeIndex].isValid) {
+      validKeyFound = true;
+      break;
+    }
+    
+    // 移到下一個金鑰
+    activeIndex = (activeIndex + 1) % apiKeys.length;
+  } while (activeIndex !== startIndex);
+  
+  // 如果沒有找到有效的金鑰，重置所有金鑰為有效
+  if (!validKeyFound) {
+    console.warn('沒有找到有效的 API 金鑰，重置所有金鑰');
+    apiKeys = apiKeys.map(key => ({ ...key, isValid: true }));
+    saveApiKeys(apiKeys);
+  }
+  
+  // 儲存當前活動索引
+  setActiveKeyIndex(activeIndex);
+  
+  const result = apiKeys[activeIndex];
+  console.log(`使用 API 金鑰 [${activeIndex + 1}/${apiKeys.length}]: ${result.apiKey.substring(0, 5)}...`);
+  
+  return result;
 };
 
-// 初始化或獲取 API 密鑰使用統計
-const getApiKeyStats = async (): Promise<ApiKeyStats> => {
+// 從本地存儲加載 API 金鑰
+const loadApiKeys = (): ApiConfig[] => {
   try {
-    const stats = await apiKeyStats.getItem<ApiKeyStats>(API_KEY_STATS_KEY);
-    if (stats) return stats;
-    
-    // 初始化統計資料
-    const apiKeys = getAllApiKeys();
-    const newStats: ApiKeyStats = {
-      keyIndex: 0,
-      usageCounts: Array(apiKeys.length).fill(0),
-      errorCounts: Array(apiKeys.length).fill(0),
-      lastRotated: Date.now(),
-      cooldowns: Array(apiKeys.length).fill(0)
-    };
-    
-    await apiKeyStats.setItem(API_KEY_STATS_KEY, newStats);
-    return newStats;
+    const storedKeys = localStorage.getItem(API_KEY_STORAGE_KEY);
+    if (!storedKeys) {
+      // 如果沒有存儲的金鑰，使用環境變數中的默認金鑰
+      if (DEFAULT_API_KEY) {
+        return [{ apiKey: DEFAULT_API_KEY, model: DEFAULT_MODEL, isValid: true }];
+      }
+      return [];
+    }
+    return JSON.parse(storedKeys);
   } catch (error) {
-    console.error('獲取 API 密鑰統計失敗:', error);
-    // 返回默認值
-    return {
-      keyIndex: 0,
-      usageCounts: [0, 0, 0],
-      errorCounts: [0, 0, 0],
-      lastRotated: Date.now(),
-      cooldowns: [0, 0, 0]
-    };
+    console.error('加載 API 金鑰時出錯:', error);
+    // 發生錯誤時，如果有默認金鑰，則使用它
+    if (DEFAULT_API_KEY) {
+      return [{ apiKey: DEFAULT_API_KEY, model: DEFAULT_MODEL, isValid: true }];
+    }
+    return [];
   }
 };
 
-// 更新 API 密鑰使用統計
-const updateApiKeyStats = async (stats: ApiKeyStats): Promise<void> => {
+// 保存 API 金鑰到本地存儲
+const saveApiKeys = (apiKeys: ApiConfig[]): void => {
   try {
-    await apiKeyStats.setItem(API_KEY_STATS_KEY, stats);
+    localStorage.setItem(API_KEY_STORAGE_KEY, JSON.stringify(apiKeys));
   } catch (error) {
-    console.error('更新 API 密鑰統計失敗:', error);
+    console.error('保存 API 金鑰時出錯:', error);
+    toast.error('無法保存 API 金鑰設置');
+  }
+};
+
+// 獲取當前活動的 API 金鑰索引
+const getActiveKeyIndex = (): number => {
+  try {
+    const index = localStorage.getItem(API_KEY_ACTIVE_INDEX);
+    return index ? parseInt(index, 10) : 0;
+  } catch (error) {
+    console.error('獲取活動金鑰索引時出錯:', error);
+    return 0;
+  }
+};
+
+// 設置當前活動的 API 金鑰索引
+const setActiveKeyIndex = (index: number): void => {
+  try {
+    localStorage.setItem(API_KEY_ACTIVE_INDEX, index.toString());
+  } catch (error) {
+    console.error('設置活動金鑰索引時出錯:', error);
   }
 };
 
@@ -324,4 +384,69 @@ export const resetApiKeyStats = async (): Promise<void> => {
   
   await updateApiKeyStats(newStats);
   console.log('API 密鑰統計已重置');
+};
+
+// 初始化或獲取 API 密鑰使用統計
+const getApiKeyStats = async (): Promise<ApiKeyStats> => {
+  try {
+    const stats = await apiKeyStats.getItem<ApiKeyStats>(API_KEY_STATS_KEY);
+    if (stats) return stats;
+    
+    // 初始化統計資料
+    const apiKeys = getAllApiKeys();
+    const newStats: ApiKeyStats = {
+      keyIndex: 0,
+      usageCounts: Array(apiKeys.length).fill(0),
+      errorCounts: Array(apiKeys.length).fill(0),
+      lastRotated: Date.now(),
+      cooldowns: Array(apiKeys.length).fill(0)
+    };
+    
+    await apiKeyStats.setItem(API_KEY_STATS_KEY, newStats);
+    return newStats;
+  } catch (error) {
+    console.error('獲取 API 密鑰統計失敗:', error);
+    // 返回默認值
+    return {
+      keyIndex: 0,
+      usageCounts: [0, 0, 0],
+      errorCounts: [0, 0, 0],
+      lastRotated: Date.now(),
+      cooldowns: [0, 0, 0]
+    };
+  }
+};
+
+// 更新 API 密鑰使用統計
+const updateApiKeyStats = async (stats: ApiKeyStats): Promise<void> => {
+  try {
+    await apiKeyStats.setItem(API_KEY_STATS_KEY, stats);
+  } catch (error) {
+    console.error('更新 API 密鑰統計失敗:', error);
+  }
+};
+
+// 添加新的 API 金鑰
+export const addApiKey = (apiKey: string, model: string = DEFAULT_MODEL): void => {
+  if (!apiKey.trim()) {
+    toast.error('API 金鑰不能為空');
+    return;
+  }
+  
+  const apiKeys = loadApiKeys();
+  
+  // 檢查是否已存在
+  if (apiKeys.some(key => key.apiKey === apiKey)) {
+    toast.error('此 API 金鑰已存在');
+    return;
+  }
+  
+  // 添加新金鑰
+  apiKeys.push({ apiKey, model, isValid: true });
+  saveApiKeys(apiKeys);
+  
+  // 設置為活動金鑰
+  setActiveKeyIndex(apiKeys.length - 1);
+  
+  toast.success('新的 API 金鑰已添加並設置為活動');
 }; 

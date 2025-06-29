@@ -134,11 +134,29 @@ const CSVManager: React.FC = () => {
       // 創建CSV標頭
       const headers = ['日期時間', '題目', '內容', '教育階段', '年級', '主題分類', '錯誤類型', 'AI分析', '錯誤步驟', '錯誤答案'];
       
-      // 轉換錯題為CSV行
+      // 轉換錯題為CSV行，確保日期格式正確
       const rows = mistakes.map(mistake => {
-        const createdAtDate = new Date(mistake.createdAt);
-        const dateStr = createdAtDate.toLocaleDateString('zh-TW');
-        const timeStr = createdAtDate.toLocaleTimeString('zh-TW');
+        // 改進日期格式處理
+        let dateStr = '';
+        let timeStr = '';
+        try {
+          const createdAtDate = new Date(mistake.createdAt);
+          
+          // 確保日期是有效的
+          if (!isNaN(createdAtDate.getTime())) {
+            // 使用 ISO 格式確保匯入時可以被正確解析
+            dateStr = createdAtDate.toISOString().split('T')[0]; // YYYY-MM-DD
+            timeStr = createdAtDate.toISOString().split('T')[1].substring(0, 8); // HH:MM:SS
+          } else {
+            console.warn('無效的日期格式:', mistake.createdAt);
+            dateStr = new Date().toISOString().split('T')[0];
+            timeStr = new Date().toISOString().split('T')[1].substring(0, 8);
+          }
+        } catch (error) {
+          console.error('處理日期時出錯:', error);
+          dateStr = new Date().toISOString().split('T')[0];
+          timeStr = new Date().toISOString().split('T')[1].substring(0, 8);
+        }
         
         return [
           `${dateStr} ${timeStr}`,

@@ -307,7 +307,7 @@
   .mistake-grid {
     grid-template-columns: repeat(3, 1fr);
   }
-}
+} 
 
 /* 錯題表格樣式 */
 .mistake-table-container {
