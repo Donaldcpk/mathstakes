@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signOut as firebaseSignOut, onAuthStateChanged, User, signInWithRedirect, getRedirectResult as firebaseGetRedirectResult, signInWithPopup } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, deleteDoc, query, where, getDocs, addDoc, orderBy, limit, startAfter } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { getAnalytics } from 'firebase/analytics';
 import toast from 'react-hot-toast';
 import { Mistake } from '../types';
@@ -34,6 +35,7 @@ try {
 // 初始化服務
 export const auth = app ? getAuth(app) : null;
 export const db = app ? getFirestore(app) : null;
+export const storage = app ? getStorage(app) : null;
 
 // 初始化 Analytics (只在瀏覽器環境中運行)
 let analytics = null;
@@ -355,4 +357,124 @@ export const getRedirectResult = async (auth: any) => {
     console.error('獲取重定向結果失敗:', error);
     throw error;
   }
+};
+
+// ==================== 圖片儲存功能 ====================
+
+// 上傳錯題圖片到 Firebase Storage
+export const uploadMistakeImage = async (file: File, userId: string): Promise<string | null> => {
+  if (!storage) {
+    console.error('Firebase Storage 服務未初始化');
+    toast.error('圖片上傳服務未初始化');
+    return null;
+  }
+
+  try {
+    // 驗證檔案類型
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('只支援 JPG、PNG、WebP 格式的圖片');
+      return null;
+    }
+
+    // 檢查檔案大小（限制 5MB）
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxSize) {
+      toast.error('圖片檔案不能超過 5MB');
+      return null;
+    }
+
+    // 生成唯一檔案名稱
+    const timestamp = Date.now();
+    const fileName = `mistake-${timestamp}-${Math.random().toString(36).substring(2, 15)}.${file.name.split('.').pop()}`;
+    const imagePath = `mistakes/${userId}/${fileName}`;
+    
+    console.log('開始上傳圖片:', imagePath);
+    console.time('upload-image');
+    
+    // 建立檔案引用並上傳
+    const imageRef = ref(storage, imagePath);
+    const snapshot = await uploadBytes(imageRef, file);
+    
+    // 獲取下載URL
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    
+    console.timeEnd('upload-image');
+    console.log('圖片上傳成功:', downloadURL);
+    
+    toast.success('圖片上傳成功');
+    return downloadURL;
+  } catch (error) {
+    console.error('圖片上傳失敗:', error);
+    toast.error('圖片上傳失敗，請重試');
+    return null;
+  }
+};
+
+// 刪除錯題圖片
+export const deleteMistakeImage = async (imageUrl: string): Promise<boolean> => {
+  if (!storage || !imageUrl) {
+    return false;
+  }
+
+  try {
+    // 從URL提取檔案路徑
+    const url = new URL(imageUrl);
+    const pathStart = url.pathname.indexOf('/o/') + 3;
+    const pathEnd = url.pathname.indexOf('?');
+    const filePath = decodeURIComponent(url.pathname.substring(pathStart, pathEnd));
+    
+    console.log('嘗試刪除圖片:', filePath);
+    
+    // 建立檔案引用並刪除
+    const imageRef = ref(storage, filePath);
+    await deleteObject(imageRef);
+    
+    console.log('圖片刪除成功');
+    return true;
+  } catch (error) {
+    console.error('刪除圖片失敗:', error);
+    // 不顯示錯誤訊息，因為圖片可能已經不存在
+    return false;
+  }
+};
+
+// 壓縮圖片 (可選功能，用於節省儲存空間)
+export const compressImage = (file: File, maxWidth: number = 800, quality: number = 0.8): Promise<File> => {
+  return new Promise((resolve) => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    
+    img.onload = () => {
+      // 計算新的尺寸
+      let { width, height } = img;
+      if (width > maxWidth) {
+        height = (height * maxWidth) / width;
+        width = maxWidth;
+      }
+      
+      // 設置畫布尺寸
+      canvas.width = width;
+      canvas.height = height;
+      
+      // 繪製壓縮後的圖片
+      ctx?.drawImage(img, 0, 0, width, height);
+      
+      // 轉換為Blob並建立新的檔案
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const compressedFile = new File([blob], file.name, {
+            type: file.type,
+            lastModified: Date.now(),
+          });
+          resolve(compressedFile);
+        } else {
+          resolve(file); // 如果壓縮失敗，返回原檔案
+        }
+      }, file.type, quality);
+    };
+    
+    img.src = URL.createObjectURL(file);
+  });
 }; 

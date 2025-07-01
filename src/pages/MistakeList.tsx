@@ -306,14 +306,38 @@ const MistakeList: React.FC = () => {
               />
             </td>
           )}
-          <td className="px-4 py-3 font-medium">
-            {isBatchMode ? (
-              mistake.title
-            ) : (
-              <Link to={`/mistake/${mistake.id}`} className="text-blue-600 hover:text-blue-800 hover:underline transition-colors">
-                {mistake.title}
-              </Link>
-            )}
+          <td className="px-4 py-3">
+            <div className="flex items-center space-x-3">
+              {mistake.imageUrl && (
+                <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-gray-100">
+                  <img 
+                    src={mistake.imageUrl} 
+                    alt="錯題縮略圖" 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // 圖片載入失敗時隱藏
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </div>
+              )}
+              <div className="flex-1">
+                <div className="font-medium">
+                  {isBatchMode ? (
+                    mistake.title
+                  ) : (
+                    <Link to={`/mistake/${mistake.id}`} className="text-blue-600 hover:text-blue-800 hover:underline transition-colors">
+                      {mistake.title}
+                    </Link>
+                  )}
+                </div>
+                {mistake.imageUrl && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    📷 包含圖片
+                  </div>
+                )}
+              </div>
+            </div>
           </td>
           <td className="px-4 py-3">{mistake.subject}</td>
           <td className="px-4 py-3">
