@@ -18,7 +18,7 @@ interface ModelConfig {
 // 智能負載均衡配置
 const MODEL_CONFIGS: ModelConfig[] = [
   {
-    name: 'mistralai/mistral-small-3.2-24b-instruct:free',
+    name: 'meta-llama/llama-4-maverick:free',
     apiKey: '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',
     requestCount: 0,
     lastUsed: 0,
@@ -35,9 +35,9 @@ const MODEL_CONFIGS: ModelConfig[] = [
   }
 ];
 
-// 第三個備用金鑰（使用第一個模型）
+// 第三個備用金鑰（使用相同模型）
 const BACKUP_CONFIG: ModelConfig = {
-  name: 'mistralai/mistral-small-3.2-24b-instruct:free',
+  name: 'meta-llama/llama-4-maverick:free',
   apiKey: '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',
   requestCount: 0,
   lastUsed: 0,
@@ -269,7 +269,7 @@ const getOptimalAPIConfig = async (): Promise<{ apiKey: string; model: string }>
     console.log('使用用戶設置的API金鑰');
     return {
       apiKey: localApiKey,
-      model: 'mistralai/mistral-small-3.2-24b-instruct:free' // 用戶設置時默認使用第一個模型
+      model: 'meta-llama/llama-4-maverick:free' // 統一使用 llama 模型
     };
   }
   

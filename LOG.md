@@ -1,5 +1,33 @@
 # Mathstakes 開發日誌
 
+## 版本 1.1.2 - 2025-01-01
+### 🔄 模型統一配置升級
+
+**已完成 - 模型配置統一為 LLaMA**:
+- ✅ **解決模型不可用問題**：將所有模型配置從 `mistralai/mistral-small-3.2-24b-instruct:free` 改為 `meta-llama/llama-4-maverick:free`
+- ✅ **統一API配置**：所有3個API金鑰現在都使用相同的 `meta-llama/llama-4-maverick:free` 模型
+- ✅ **修復404錯誤**：解決了 Mistral 模型出現的 "No allowed providers are available" 錯誤
+- ✅ **負載均衡優化**：保持智能負載均衡系統，但使用統一的模型配置
+
+**技術修改**:
+- 修改 `src/utils/ai.ts` 中的 MODEL_CONFIGS 和 BACKUP_CONFIG
+- 更新 `src/utils/apiKeyManager.ts` 中的 DEFAULT_MODEL 設定
+- 保持所有錯誤處理和重試機制不變
+- 維持智能API金鑰管理系統
+
+**問題解決**:
+- 解決了控制台中的 404 API 錯誤
+- 確保圖片識別和AI解釋功能正常運作
+- 改善用戶體驗，減少API請求失敗
+
+**參考實作**:
+使用標準的 OpenRouter API 配置方式，包含：
+- baseURL: "https://openrouter.ai/api/v1"
+- 適當的 HTTP-Referer 和 X-Title headers
+- 統一的模型名稱: `meta-llama/llama-4-maverick:free`
+
+---
+
 ## 版本 1.1.1 - 2025-01-01
 ### 🔐 智能API金鑰管理與安全強化
 
