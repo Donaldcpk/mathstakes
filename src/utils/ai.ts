@@ -18,7 +18,7 @@ interface ModelConfig {
 // 智能負載均衡配置
 const MODEL_CONFIGS: ModelConfig[] = [
   {
-    name: 'meta-llama/llama-4-maverick:free',
+    name: 'meta-llama/llama-3.1-8b-instruct:free',
     apiKey: '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',
     requestCount: 0,
     lastUsed: 0,
@@ -26,7 +26,7 @@ const MODEL_CONFIGS: ModelConfig[] = [
     errorCount: 0
   },
   {
-    name: 'meta-llama/llama-4-maverick:free',
+    name: 'mistralai/mistral-7b-instruct:free',
     apiKey: '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',
     requestCount: 0,
     lastUsed: 0,
@@ -35,9 +35,9 @@ const MODEL_CONFIGS: ModelConfig[] = [
   }
 ];
 
-// 第三個備用金鑰（使用相同模型）
+// 第三個備用金鑰（使用第三個可用的免費模型）
 const BACKUP_CONFIG: ModelConfig = {
-  name: 'meta-llama/llama-4-maverick:free',
+  name: 'mistralai/mistral-nemo:free',
   apiKey: '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',
   requestCount: 0,
   lastUsed: 0,
@@ -182,6 +182,18 @@ const markModelAsUnavailable = (modelName: string, apiKey: string, errorMessage?
       config.isAvailable = false;
     }
     console.log(`模型配置錯誤計數更新: ${config.errorCount}/3`);
+    
+    // 檢查是否所有模型都不可用
+    const allUnavailable = MODEL_CONFIGS.every(c => !c.isAvailable) && !BACKUP_CONFIG.isAvailable;
+    if (allUnavailable && errorMessage?.includes('No allowed providers')) {
+      console.error('🚨 API金鑰權限問題檢測到:');
+      console.error('所有模型都返回 "No allowed providers" 錯誤');
+      console.error('可能的解決方案:');
+      console.error('1. 檢查 OpenRouter 帳戶餘額');
+      console.error('2. 驗證API金鑰權限設置');
+      console.error('3. 確認帳戶狀態是否正常');
+      console.error('4. 聯繫 OpenRouter 技術支援');
+    }
   }
   
   // 檢查備用配置
@@ -269,7 +281,7 @@ const getOptimalAPIConfig = async (): Promise<{ apiKey: string; model: string }>
     console.log('使用用戶設置的API金鑰');
     return {
       apiKey: localApiKey,
-      model: 'meta-llama/llama-4-maverick:free' // 統一使用 llama 模型
+      model: 'meta-llama/llama-3.1-8b-instruct:free' // 使用確認存在的免費模型
     };
   }
   
@@ -503,8 +515,8 @@ export async function generateMistakeInfoFromImage(imageUrl: string): Promise<Mi
           
           // 返回預設值而非拋出錯誤
           return {
-            title: '未能識別題目',
-            content: '圖片識別失敗，請手動輸入題目內容',
+            title: '圖片識別暫時不可用',
+            content: '目前 AI 服務遇到權限問題，無法進行圖片識別。\n\n可能原因：\n• OpenRouter API 帳戶餘額不足\n• API 金鑰權限受限\n• 服務暫時維護中\n\n建議解決方案：\n1. 檢查 OpenRouter 帳戶狀態\n2. 確認 API 金鑰權限\n3. 稍後重試或手動輸入題目內容',
             subject: '數學',
             errorType: ErrorType.UNKNOWN
           };
@@ -625,40 +637,40 @@ export const generateAIExplanation = async (mistake: Mistake): Promise<string> =
           // 最後一次嘗試失敗，返回預設模板
           console.log('所有重試嘗試都失敗，返回預設模板');
           toast.dismiss(toastId);
-          toast.error('AI服務暫時不可用，已提供預設分析');
+          toast.error('AI 服務暫時不可用');
           
           return `
-### ${mistake.title} - 解題分析
+### AI 服務暫時不可用
 
-#### 錯誤分析
-這類題目學生常見的錯誤包括：
-- 混淆概念或公式
-- 計算過程中出錯
-- 理解題目條件不完整
-- 錯誤應用數學原理
+#### ⚠️ 服務狀態
+目前 AI 解釋服務遇到權限問題，無法正常運作。
 
-#### 解題步驟
-針對題目：${mistake.content}
+#### 🔍 可能原因
+- OpenRouter API 帳戶餘額不足
+- API 金鑰權限受限制
+- 服務暫時進行維護
+- 模型供應商暫時不可用
 
-我們應該按照以下步驟解答：
-1. 仔細閱讀並理解題目條件
-2. 確定使用的數學方法和公式
-3. 根據條件進行運算
-4. 得出結論並檢查答案
+#### 💡 建議解決方案
+1. **檢查帳戶狀態**：登入 [OpenRouter](https://openrouter.ai) 確認帳戶餘額
+2. **驗證API權限**：確認API金鑰具有模型調用權限
+3. **稍後重試**：等待一段時間後重新嘗試
+4. **手動分析**：暫時可以手動分析題目和錯誤
 
-#### 知識點解釋
-本題涉及的主要知識點包括：
-- ${mistake.subject}相關概念
-- 解題思路和方法
-- 計算技巧和注意事項
+#### 📝 題目信息
+- **標題**: ${mistake.title}
+- **內容**: ${mistake.content}
+- **學科**: ${mistake.subject}
+- **階段**: ${mistake.educationLevel}
 
-#### 學習建議
-- 加強基礎概念的理解
-- 多做類似題目練習
-- 學會檢查自己的答案
-- 總結解題方法和技巧
+#### 🎯 基本學習建議
+針對數學錯題，通常的分析步驟包括：
+1. **找出錯誤點**：仔細比對正確解法
+2. **理解概念**：複習相關的數學概念
+3. **練習類似題目**：加強相同類型題目的練習
+4. **建立解題策略**：歸納有效的解題方法
 
-> ⚠️ 此為預設分析模板，建議稍後重試獲取個性化AI解釋
+> 💻 技術提示：請聯繫管理員檢查 API 配置，或稍後重試此功能
           `;
         } else {
           const delay = AI_CONFIG.retryDelay * Math.pow(2, attempt - 1);
@@ -674,18 +686,27 @@ export const generateAIExplanation = async (mistake: Mistake): Promise<string> =
   } catch (error) {
     console.error('生成AI解釋出錯:', error);
     toast.dismiss(toastId);
-    toast.error('生成AI解釋時發生錯誤');
+    toast.error('AI 服務暫時不可用，請稍後重試');
     
     // 返回一個友好的錯誤消息而不是拋出錯誤
     return `
-### 錯誤提示
+### ❌ AI 解釋生成失敗
 
-在生成AI解釋時遇到了技術問題。請稍後再試，或者您可以嘗試手動分析這道題目。
+目前無法連接到 AI 服務，請稍後再試。
 
-### 題目信息
-- 標題: ${mistake.title}
-- 內容: ${mistake.content}
-- 學科: ${mistake.subject}
+#### 題目信息
+- **標題**: ${mistake.title}
+- **內容**: ${mistake.content}
+- **學科**: ${mistake.subject}
+
+#### 臨時建議
+您可以嘗試：
+1. 稍後重新生成AI解釋
+2. 手動分析題目錯誤
+3. 查閱相關教材或資源
+4. 請教老師或同學
+
+> 如果問題持續存在，請聯繫技術支援。
     `;
   }
 }; 
