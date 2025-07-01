@@ -407,11 +407,11 @@ export const generateAIExplanation = async (mistake: Mistake): Promise<string> =
       
     // 檢查響應
     if (!response.ok) {
-      toast.dismiss(toastId);
-      toast.error('AI服務暫時不可用，請稍後重試');
-      
-      // 返回一個預設的解釋模板
-      return `
+        toast.dismiss(toastId);
+        toast.error('AI服務暫時不可用，請稍後重試');
+        
+        // 返回一個預設的解釋模板
+        return `
 ### ${mistake.title} - 解題分析
 
 #### 錯誤分析
@@ -441,7 +441,7 @@ export const generateAIExplanation = async (mistake: Mistake): Promise<string> =
 - 多做類似題目練習
 - 學會檢查自己的答案
 - 總結解題方法和技巧
-      `;
+        `;
     }
     
     // 第一個金鑰成功的情況
