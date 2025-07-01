@@ -15,10 +15,10 @@ interface ModelConfig {
   errorCount: number;
 }
 
-// 智能負載均衡配置
+// 智能負載均衡配置 - 使用支援視覺功能的模型
 const MODEL_CONFIGS: ModelConfig[] = [
   {
-    name: 'meta-llama/llama-3.1-8b-instruct:free',
+    name: 'meta-llama/llama-3.2-11b-vision-instruct:free',
     apiKey: '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',
     requestCount: 0,
     lastUsed: 0,
@@ -26,8 +26,16 @@ const MODEL_CONFIGS: ModelConfig[] = [
     errorCount: 0
   },
   {
-    name: 'mistralai/mistral-7b-instruct:free',
+    name: 'moonshotai/kimi-vl-a3b-thinking:free',
     apiKey: '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',
+    requestCount: 0,
+    lastUsed: 0,
+    isAvailable: true,
+    errorCount: 0
+  },
+  {
+    name: 'meta-llama/llama-4-scout:free',
+    apiKey: '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',
     requestCount: 0,
     lastUsed: 0,
     isAvailable: true,
@@ -35,15 +43,18 @@ const MODEL_CONFIGS: ModelConfig[] = [
   }
 ];
 
-// 第三個備用金鑰（使用第三個可用的免費模型）
+// 第三個備用金鑰（也使用支援視覺的模型）
 const BACKUP_CONFIG: ModelConfig = {
-  name: 'mistralai/mistral-nemo:free',
-  apiKey: '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',
+  name: 'meta-llama/llama-3.2-11b-vision-instruct:free',
+  apiKey: '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',
   requestCount: 0,
   lastUsed: 0,
   isAvailable: true,
   errorCount: 0
 };
+
+// 默認模型設置（支援視覺功能）
+const DEFAULT_MODEL = 'meta-llama/llama-3.2-11b-vision-instruct:free';
 
 // 載入均衡統計數據
 const loadBalancingStats = {
@@ -281,7 +292,7 @@ const getOptimalAPIConfig = async (): Promise<{ apiKey: string; model: string }>
     console.log('使用用戶設置的API金鑰');
     return {
       apiKey: localApiKey,
-      model: 'meta-llama/llama-3.1-8b-instruct:free' // 使用確認存在的免費模型
+      model: MODEL_CONFIGS[0].name
     };
   }
   
