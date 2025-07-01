@@ -4,12 +4,122 @@ import { toast } from 'react-hot-toast';
 // import { getApiConfig, markApiKeyAsInvalid } from './apiKeyManager';
 import { processAIResponse } from './formulaFormatter';
 
+// 多模型配置系統
+interface ModelConfig {
+  name: string;
+  apiKey: string;
+  requestCount: number;
+  lastUsed: number;
+  isAvailable: boolean;
+}
+
+// 智能負載均衡配置
+const MODEL_CONFIGS: ModelConfig[] = [
+  {
+    name: 'mistralai/mistral-small-3.2-24b-instruct:free',
+    apiKey: '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',
+    requestCount: 0,
+    lastUsed: 0,
+    isAvailable: true
+  },
+  {
+    name: 'meta-llama/llama-4-maverick:free',
+    apiKey: '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',
+    requestCount: 0,
+    lastUsed: 0,
+    isAvailable: true
+  }
+];
+
+// 第三個備用金鑰（使用第一個模型）
+const BACKUP_CONFIG: ModelConfig = {
+  name: 'mistralai/mistral-small-3.2-24b-instruct:free',
+  apiKey: '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',
+  requestCount: 0,
+  lastUsed: 0,
+  isAvailable: true
+};
+
+// 載入均衡統計數據
+const loadBalancingStats = {
+  totalRequests: parseInt(localStorage.getItem('mathstakes_total_requests') || '0'),
+  dailyRequests: parseInt(localStorage.getItem('mathstakes_daily_requests') || '0'),
+  lastResetDate: localStorage.getItem('mathstakes_last_reset') || new Date().toDateString()
+};
+
+// 智能模型選擇器
+const selectOptimalModel = (): ModelConfig => {
+  const now = Date.now();
+  const currentDate = new Date().toDateString();
+  
+  // 重置每日統計
+  if (loadBalancingStats.lastResetDate !== currentDate) {
+    loadBalancingStats.dailyRequests = 0;
+    loadBalancingStats.lastResetDate = currentDate;
+    localStorage.setItem('mathstakes_daily_requests', '0');
+    localStorage.setItem('mathstakes_last_reset', currentDate);
+  }
+  
+  // 更新請求統計
+  loadBalancingStats.totalRequests++;
+  loadBalancingStats.dailyRequests++;
+  localStorage.setItem('mathstakes_total_requests', loadBalancingStats.totalRequests.toString());
+  localStorage.setItem('mathstakes_daily_requests', loadBalancingStats.dailyRequests.toString());
+  
+  // 過濾可用模型
+  const availableModels = MODEL_CONFIGS.filter(config => config.isAvailable);
+  
+  if (availableModels.length === 0) {
+    console.warn('沒有可用模型，使用備用配置');
+    return BACKUP_CONFIG;
+  }
+  
+  // 智能分散邏輯：根據訪問數量和時間決定使用哪個模型
+  let selectedModel: ModelConfig;
+  
+  if (loadBalancingStats.dailyRequests <= 10) {
+    // 前10次請求優先使用第一個模型
+    selectedModel = availableModels[0];
+  } else {
+    // 根據請求數量智能分散
+    const modelIndex = Math.floor(Math.random() * availableModels.length);
+    selectedModel = availableModels[modelIndex];
+    
+    // 基於負載均衡選擇最少使用的模型
+    const leastUsedModel = availableModels.reduce((min, current) => 
+      current.requestCount < min.requestCount ? current : min
+    );
+    
+    // 30%概率選擇最少使用的模型，70%概率隨機選擇
+    if (Math.random() < 0.3) {
+      selectedModel = leastUsedModel;
+    }
+  }
+  
+  // 更新選中模型的統計
+  selectedModel.requestCount++;
+  selectedModel.lastUsed = now;
+  
+  console.log(`智能負載均衡 - 選擇模型: ${selectedModel.name}`);
+  console.log(`當日請求數: ${loadBalancingStats.dailyRequests}, 總請求數: ${loadBalancingStats.totalRequests}`);
+  
+  return selectedModel;
+};
+
+// 標記模型為不可用
+const markModelAsUnavailable = (modelName: string, apiKey: string): void => {
+  const config = MODEL_CONFIGS.find(c => c.name === modelName && c.apiKey === apiKey);
+  if (config) {
+    config.isAvailable = false;
+    console.log(`模型 ${modelName} 已標記為不可用`);
+  }
+};
+
 // AI 配置
 const AI_CONFIG = {
   responseTimeout: 60000, // 60秒超時
-  maxRetries: 3,
+  maxRetries: 4, // 增加重試次數
   retryDelay: 1000,
-  modelName: 'mistralai/mistral-small-3.2-24b-instruct:free', // 固定使用此模型
   temperature: 0.1,
   max_tokens: 4000,
   textGeneration: {
@@ -69,13 +179,30 @@ const AI_CONFIG = {
   }
 };
 
-// 硬編碼的API金鑰
-const API_KEYS = [
-  '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'
-];
-
 // API基礎URL
 const API_BASE_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+// 從本地存儲或智能選擇API配置
+const getOptimalAPIConfig = (): { apiKey: string; model: string } => {
+  // 優先使用用戶設置的金鑰
+  const localApiKey = localStorage.getItem('mathstakes_api_key');
+  if (localApiKey && localApiKey.startsWith('sk-or-')) {
+    console.log('使用用戶設置的API金鑰');
+    return {
+      apiKey: localApiKey,
+      model: 'mistralai/mistral-small-3.2-24b-instruct:free' // 用戶設置時默認使用第一個模型
+    };
+  }
+  
+  // 使用智能負載均衡選擇
+  const selectedConfig = selectOptimalModel();
+  console.log(`智能選擇配置 - 模型: ${selectedConfig.name}`);
+  
+  return {
+    apiKey: selectedConfig.apiKey,
+    model: selectedConfig.name
+  };
+};
 
 // 檢查圖片 URL 是否有效
 const isValidImageUrl = async (url: string): Promise<boolean> => {
@@ -87,21 +214,7 @@ const isValidImageUrl = async (url: string): Promise<boolean> => {
     console.error('檢查圖片URL有效性出錯:', error);
     return false;
   }
-};
-
-// 從本地存儲或硬編碼列表獲取API金鑰
-const getAPIKey = (): string => {
-  // 優先使用用戶設置的金鑰
-  const localApiKey = localStorage.getItem('mathstakes_api_key');
-  if (localApiKey && localApiKey.startsWith('sk-or-')) {
-    console.log('使用用戶設置的API金鑰');
-    return localApiKey;
-  }
-  
-  // 使用硬編碼金鑰
-  console.log('使用默認API金鑰');
-  return API_KEYS[0];
-};
+  };
 
 // 更新枚舉映射
 const mapTopicCategory = (category?: string): TopicCategory | undefined => {
@@ -169,12 +282,12 @@ export async function generateMistakeInfoFromImage(imageUrl: string): Promise<Mi
     }
     
     // 獲取API金鑰
-    let API_KEY = getAPIKey();
+    const { apiKey, model } = getOptimalAPIConfig();
     
     // 記錄API金鑰信息（不顯示完整金鑰）
     console.log('API設置確認:', {
-      apiKey: API_KEY ? `${API_KEY.substring(0, 5)}...${API_KEY.substring(API_KEY.length - 5)}` : '未設置',
-      model: AI_CONFIG.modelName
+      apiKey: apiKey ? `${apiKey.substring(0, 5)}...${apiKey.substring(apiKey.length - 5)}` : '未設置',
+      model: model
     });
     
     // 構建系統提示詞
@@ -209,7 +322,7 @@ export async function generateMistakeInfoFromImage(imageUrl: string): Promise<Mi
     
     // 構建請求體
     const requestBody = {
-      model: AI_CONFIG.modelName,
+      model: model,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: [
@@ -222,9 +335,9 @@ export async function generateMistakeInfoFromImage(imageUrl: string): Promise<Mi
     };
     
     // 記錄API請求開始
-    console.log(`開始API請求 (模型: ${AI_CONFIG.modelName})`);
+    console.log(`開始API請求 (模型: ${model})`);
     console.log('發送API請求到:', API_BASE_URL);
-    console.log('請求頭部包含Authorization:', API_KEY ? '是' : '否');
+    console.log('請求頭部包含Authorization:', apiKey ? '是' : '否');
     console.log('完整請求內容(不含金鑰):', JSON.stringify(requestBody));
     
     // 使用重試機制包裝 API 請求
@@ -235,7 +348,7 @@ export async function generateMistakeInfoFromImage(imageUrl: string): Promise<Mi
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${API_KEY}`,
+              'Authorization': `Bearer ${apiKey}`,
               'HTTP-Referer': window.location.origin,
               'X-Title': 'Mathstakes App',
               'User-Agent': 'Mathstakes-App/1.0'
@@ -347,10 +460,10 @@ export const generateAIExplanation = async (mistake: Mistake): Promise<string> =
     // 顯示加載提示
     const toastId = toast.loading('正在生成AI解釋...');
     
-    // 直接使用第一個硬編碼API金鑰，不使用API保護機制
-    let API_KEY = API_KEYS[0];
+    // 獲取最佳API配置
+    const { apiKey, model } = getOptimalAPIConfig();
     
-    console.log('開始生成AI解釋 (模型: mistralai/mistral-small-3.2-24b-instruct:free, 金鑰: ' + API_KEY.substring(0, 8) + '...)');
+    console.log(`開始生成AI解釋 (模型: ${model}, 金鑰: ${apiKey.substring(0, 8)}...)`);
     
     // 構建系統提示詞 - 簡化判斷邏輯
     const systemPrompt = `你是一位專業數學教師，擅長分析學生的錯題並提供詳細解釋。請針對學生提交的題目，分析可能存在的錯誤，提供完整的解題步驟，並給出學習建議。回答要清晰、準確、易於理解，適合${mistake.educationLevel}學生的認知水平。請使用繁體中文回答，數學公式請使用LaTeX格式（例如：$x^2 + y^2 = r^2$）。`;
@@ -375,7 +488,7 @@ export const generateAIExplanation = async (mistake: Mistake): Promise<string> =
     
     // 構建請求體
     const requestBody = {
-      model: AI_CONFIG.modelName,
+      model: model,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
@@ -397,7 +510,7 @@ export const generateAIExplanation = async (mistake: Mistake): Promise<string> =
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`,
+        'Authorization': `Bearer ${apiKey}`,
         'HTTP-Referer': window.location.origin,
         'X-Title': 'Mathstakes App',
         'User-Agent': 'Mathstakes-App/1.0'
